@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-[#090A0F] text-white antialiased;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-[#12161A] border border-slate-800/70 rounded-2xl;
+  }
+  .input-base {
+    @apply w-full bg-[#0E1318] border border-slate-700/50 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500
+      focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition;
+  }
+  .label-base {
+    @apply block text-xs font-medium text-slate-400 mb-1.5;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800
+      text-white font-medium text-sm rounded-lg px-4 py-2.5 transition-all duration-200
+      disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700
+      text-slate-200 font-medium text-sm rounded-lg px-4 py-2.5 transition;
+  }
+  .icon-btn {
+    @apply flex items-center justify-center rounded-lg p-2 text-slate-500
+      hover:text-white hover:bg-slate-800 transition-all duration-200;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.spinner {
+  @apply inline-block rounded-full border-2 border-slate-600 border-t-white animate-spin;
+}
