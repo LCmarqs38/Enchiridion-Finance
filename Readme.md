@@ -7,6 +7,14 @@ A personal finance dashboard built with React and TypeScript to help organize in
 
 ---
 
+## Preview
+
+<p align="center">
+  <img src="dashboard.png" width="900">
+</p>
+
+---
+
 ## Features
 
 - **Dashboard:** Overview of total balance, monthly income, operating expenses, and net profit.
@@ -35,17 +43,17 @@ A personal finance dashboard built with React and TypeScript to help organize in
    ```
 2. Navigate to the folder:
 
-```Bash
+```bash
 cd Enchiridion-Finance
 ```
 3. Install dependencies:
 
-```Bash
+```bash
 npm install
 ```
 4. Run locally:
 
-```Bash
+```bash
 npm run dev
 ```
 
