@@ -10,7 +10,7 @@ A personal finance dashboard built with React and TypeScript to help organize in
 ## Preview
 
 <p align="center">
-  <img src="dashboard.png" width="900">
+  <img src="Painel Enchiridion.png" width="900">
 </p>
 
 ---
