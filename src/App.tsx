@@ -1,6 +1,5 @@
-import { BookMarked } from 'lucide-react';
-import { Home, PlusCircle, PiggyBank, TrendingUp, Clock, LogOut, RotateCcw, Download, Upload } from 'lucide-react';
 import { useState } from 'react';
+import { Home, PlusCircle, PiggyBank, TrendingUp, Clock, LogOut, RotateCcw, Download, Upload } from 'lucide-react';
 import Dashboard from '@/pages/Dashboard';
 import Lancamentos from '@/pages/Lancamentos';
 import Orcamento from '@/pages/Orcamento';
@@ -43,7 +42,7 @@ export default function App() {
         const confirmImport = window.confirm(
           'Isto irá substituir todos os seus dados atuais pelo backup. Deseja continuar?'
         );
-        
+
         if (!confirmImport) {
           e.target.value = '';
           return;
@@ -55,15 +54,16 @@ export default function App() {
         if (data.categories) localStorage.setItem('pf_categories', JSON.stringify(data.categories));
 
         alert('Backup restaurado com sucesso!');
-        window.location.reload(); 
+        window.location.reload();
       } catch (error) {
         alert('Erro ao importar. Certifique-se de que o ficheiro é um backup válido (JSON).');
       }
-      
-      e.target.value = ''; 
+
+      e.target.value = '';
     };
     reader.readAsText(file);
   };
+
   const handleExportJSON = () => {
     const data = {
       transactions: JSON.parse(localStorage.getItem('pf_transactions') || '[]'),
@@ -71,7 +71,7 @@ export default function App() {
       receivables: JSON.parse(localStorage.getItem('pf_receivables') || '[]'),
       categories: JSON.parse(localStorage.getItem('pf_categories') || '[]'),
     };
-    
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -82,9 +82,10 @@ export default function App() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+
   const handleResetData = () => {
     const confirmReset = window.confirm(
-      'Tem a certeza de que deseja apagar todos os lançamentos e dados de exemplo para começar as suas finanças do zero?'
+      'Tem a certeza de que deseja apagar todos os lançamentos para começar as suas finanças do zero?'
     );
     if (!confirmReset) return;
 
@@ -92,8 +93,6 @@ export default function App() {
     localStorage.setItem('pf_transactions', JSON.stringify([]));
     localStorage.setItem('pf_receivables', JSON.stringify([]));
     localStorage.setItem('pf_budgets', JSON.stringify([]));
-    
-    // (A coleção de categorias mantém-se intacta, ou pode adicionar aqui se quiser resetar as categorias também)
 
     window.location.reload();
   };
@@ -115,7 +114,7 @@ export default function App() {
     <div className="min-h-screen bg-[#090A0F] flex overflow-x-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-60 border-r border-slate-800/60 bg-[#0C0E14] fixed h-screen z-30">
-      <div className="flex items-center gap-3 px-5 h-14 border-b border-slate-800/60">
+        <div className="flex items-center gap-3 px-5 h-14 border-b border-slate-800/60">
           <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center p-1.5 shadow-md">
             <svg viewBox="0 0 24 24" fill="none" className="w-full h-full text-amber-400" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="9" className="text-amber-500/30" stroke="currentColor" strokeDasharray="2 3" />
@@ -146,9 +145,9 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Rodapé da Sidebar: Zerar Dados, Info do Usuário & Sair */}
+        {/* Rodapé da Sidebar */}
         <div className="p-3 border-t border-slate-800/60 space-y-2">
-        <button
+          <button
             onClick={handleExportJSON}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-blue-400 hover:bg-slate-800/50 transition mb-1"
             title="Exportar base de dados local"
@@ -156,7 +155,7 @@ export default function App() {
             <Download className="w-3.5 h-3.5 text-blue-500" />
             <span>Backup JSON</span>
           </button>
-          {/* BOTÃO DE IMPORTAR */}
+          
           <label className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-emerald-400 hover:bg-slate-800/50 transition mb-1 cursor-pointer" title="Restaurar base de dados">
             <Upload className="w-3.5 h-3.5 text-emerald-500" />
             <span>Restaurar Backup</span>
@@ -167,13 +166,14 @@ export default function App() {
               onChange={handleImportJSON} 
             />
           </label>
+          
           <button
             onClick={handleResetData}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 hover:text-amber-400 hover:bg-slate-800/40 transition"
-            title="Limpar dados fictícios de teste"
+            title="Zerar Dados"
           >
             <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
-            <span>Zerar Dados de Teste</span>
+            <span>Zerar Dados</span>
           </button>
 
           <div className="flex items-center justify-between px-2 py-1.5 border-t border-slate-800/40">
@@ -197,7 +197,19 @@ export default function App() {
         {/* Top App Bar — mobile only */}
         <header className="lg:hidden sticky top-0 z-40 bg-[#090A0F]/95 backdrop-blur-md border-b border-slate-800/80 px-4 h-14 flex items-center justify-between">
           <span className="text-sm font-bold text-white tracking-wide uppercase">Painel Financeiro</span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            
+            {/* Ícone de Restaurar Backup (Mobile) */}
+            <label className="icon-btn p-2 text-slate-400 hover:text-emerald-400 cursor-pointer" title="Restaurar Backup">
+              <Upload className="w-4 h-4 text-emerald-500" />
+              <input 
+                type="file" 
+                accept=".json" 
+                className="hidden" 
+                onChange={handleImportJSON} 
+              />
+            </label>
+
             <button
               onClick={handleResetData}
               className="icon-btn p-2 text-slate-400 hover:text-amber-400"
@@ -205,7 +217,7 @@ export default function App() {
             >
               <RotateCcw className="w-4 h-4 text-amber-500" />
             </button>
-            <button onClick={handleLogout} className="icon-btn p-2" aria-label="Sair">
+            <button onClick={handleLogout} className="icon-btn p-2 text-slate-400 hover:text-rose-400" title="Sair">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
