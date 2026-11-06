@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Clock, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Clock, Plus, Trash2, Edit2, X } from 'lucide-react';
 import { initialReceivables, Receivable, Transaction, initialTransactions } from '@/data/financeData';
 import { formatCurrency, formatDateLong, todayISO } from '@/utils/format';
 
@@ -16,10 +16,29 @@ export default function AReceber() {
     client: '',
   });
 
+  // Estado para controlar qual item está a receber um pagamento parcial
+  const [partialPayment, setPartialPayment] = useState<{ id: string; amount: string } | null>(null);
+
   const saveReceivables = (newItems: Receivable[]) => {
     setItems(newItems);
     localStorage.setItem('pf_receivables', JSON.stringify(newItems));
-    // Avisa os outros componentes que houve uma alteração
+    window.dispatchEvent(new Event('finance_data_updated'));
+  };
+
+  const addTransaction = (description: string, val: number, id: string) => {
+    const savedTx = localStorage.getItem('pf_transactions');
+    const txList: Transaction[] = savedTx ? JSON.parse(savedTx) : initialTransactions;
+    
+    const newTx: Transaction = {
+      id: `rec_${id}_${Date.now()}`,
+      date: todayISO(),
+      type: 'entrada',
+      category: 'Servicos / Freelance',
+      description,
+      value: val,
+    };
+    
+    localStorage.setItem('pf_transactions', JSON.stringify([newTx, ...txList]));
     window.dispatchEvent(new Event('finance_data_updated'));
   };
 
@@ -32,111 +51,158 @@ export default function AReceber() {
       id: String(Date.now()),
       description: form.description.trim(),
       value: val,
+      paidValue: 0,
       dueDate: form.dueDate,
       client: form.client.trim() || 'Nao especificado',
       status: 'pendente',
     };
 
     saveReceivables([newItem, ...items]);
-    setForm({
-      description: '',
-      value: '',
-      dueDate: todayISO(),
-      client: '',
-    });
+    setForm({ description: '', value: '', dueDate: todayISO(), client: '' });
   };
 
+  // Liquidação total automática
   const handleToggleStatus = (item: Receivable) => {
-    const nextStatus: 'pendente' | 'recebido' = item.status === 'pendente' ? 'recebido' : 'pendente';
+    if (item.status === 'recebido') return; // Se já foi recebido, ignorar
     
-    // Declaramos explicitamente que o array atualizado é do tipo Receivable[]
-    const updated: Receivable[] = items.map((i) => 
-      i.id === item.id ? { ...i, status: nextStatus } : i
+    const remainingVal = item.value - (item.paidValue || 0);
+    
+    const updated = items.map((i): Receivable =>
+      i.id === item.id ? { ...i, status: 'recebido', paidValue: item.value } : i
     );
     
     saveReceivables(updated);
+    addTransaction(`Recebimento (Total): ${item.description}`, remainingVal, item.id);
+  };
 
-    // Cria ou remove automaticamente o lançamento correspondente no extrato
-    const savedTx = localStorage.getItem('pf_transactions');
-    let txList: Transaction[] = savedTx ? JSON.parse(savedTx) : initialTransactions;
+  // Registo de pagamento parcial
+  const handlePartialSubmit = (item: Receivable) => {
+    if (!partialPayment || partialPayment.id !== item.id) return;
+    
+    const amountToPay = parseFloat(partialPayment.amount);
+    if (isNaN(amountToPay) || amountToPay <= 0) return;
 
-    if (nextStatus === 'recebido') {
-      const newTx: Transaction = {
-        id: `rec_${item.id}`,
-        date: todayISO(),
-        type: 'entrada',
-        category: 'Servicos / Freelance',
-        description: `Recebimento: ${item.description}`,
-        value: item.value,
-      };
-      txList = [newTx, ...txList];
-    } else {
-      txList = txList.filter((t) => t.id !== `rec_${item.id}`);
-    }
+    const currentPaid = item.paidValue || 0;
+    const remaining = item.value - currentPaid;
+    
+    // Evita pagar mais do que se deve; se for igual, liquida tudo
+    const finalPayment = Math.min(amountToPay, remaining);
+    const newPaidTotal = currentPaid + finalPayment;
+    
+    const newStatus: 'recebido' | 'parcial' = newPaidTotal >= item.value ? 'recebido' : 'parcial';
 
-    localStorage.setItem('pf_transactions', JSON.stringify(txList));
-    window.dispatchEvent(new Event('finance_data_updated'));
+    const updated = items.map((i): Receivable => 
+      i.id === item.id ? { ...i, status: newStatus, paidValue: newPaidTotal } : i
+    );
+
+    saveReceivables(updated);
+    addTransaction(`Recebimento (Parcial): ${item.description}`, finalPayment, item.id);
+    setPartialPayment(null); // Fecha o input
   };
 
   const handleDelete = (id: string) => {
-    const updated = items.filter((i) => i.id !== id);
-    saveReceivables(updated);
-
-    // Se for apagado, remove também a transação automática gerada (se existir)
-    const savedTx = localStorage.getItem('pf_transactions');
-    if (savedTx) {
-      const txList: Transaction[] = JSON.parse(savedTx);
-      const filtered = txList.filter((t) => t.id !== `rec_${id}`);
-      localStorage.setItem('pf_transactions', JSON.stringify(filtered));
-      window.dispatchEvent(new Event('finance_data_updated'));
-    }
+    saveReceivables(items.filter((i) => i.id !== id));
   };
 
-  const totalPendente = items.filter((i) => i.status === 'pendente').reduce((s, i) => s + i.value, 0);
-  const totalRecebido = items.filter((i) => i.status === 'recebido').reduce((s, i) => s + i.value, 0);
+  // Cálculos consolidados para os cartões no topo
+  const totalPendente = items.reduce((s, i) => s + (i.value - (i.paidValue || 0)), 0);
+  const totalRecebido = items.reduce((s, i) => s + (i.paidValue || 0), 0);
 
-  // Função isolada para evitar erros sintáticos no JSX map
   const renderItem = (item: Receivable) => {
+    const paid = item.paidValue || 0;
+    const remaining = item.value - paid;
     const isRecebido = item.status === 'recebido';
+    const isPartial = item.status === 'parcial';
     
     const btnClass = isRecebido
-      ? 'w-8 h-8 rounded-lg flex items-center justify-center transition bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+      ? 'w-8 h-8 rounded-lg flex items-center justify-center transition bg-emerald-500/20 text-emerald-400 cursor-default'
       : 'w-8 h-8 rounded-lg flex items-center justify-center transition bg-slate-800/60 text-slate-400 hover:text-emerald-400';
       
     const titleClass = isRecebido 
       ? 'text-xs sm:text-sm font-medium line-through text-slate-400' 
       : 'text-xs sm:text-sm font-medium text-white';
-      
-    const valueClass = isRecebido 
-      ? 'text-xs sm:text-sm font-semibold tabular-nums text-emerald-400' 
-      : 'text-xs sm:text-sm font-semibold tabular-nums text-white';
+
+    const isPayingPartial = partialPayment?.id === item.id;
 
     return (
-      <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-800/40 transition">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => handleToggleStatus(item)}
-            className={btnClass}
-            title={isRecebido ? 'Marcar como pendente' : 'Marcar como recebido'}
-          >
-            <CheckCircle2 className="w-4 h-4"></CheckCircle2>
-          </button>
-          <div>
-            <p className={titleClass}>{item.description}</p>
-            <p className="text-[10px] text-slate-500">
-              Cliente: {item.client} - {item.dueDate ? `Vencimento: ${formatDateLong(item.dueDate)}` : 'Sem prazo'}
-            </p>
+      <div key={item.id} className="flex flex-col p-3 rounded-xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-800/40 transition">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => handleToggleStatus(item)}
+              className={btnClass}
+              title={isRecebido ? 'Pago integralmente' : 'Liquidar Total'}
+              disabled={isRecebido}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+            </button>
+            <div>
+              <p className={titleClass}>
+                {item.description}
+                {isPartial && !isRecebido && (
+                  <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 uppercase">
+                    Parcial
+                  </span>
+                )}
+              </p>
+              <p className="text-[10px] text-slate-500">
+                Cliente: {item.client} &bull; {item.dueDate ? `Venc.: ${formatDateLong(item.dueDate)}` : 'Sem prazo'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <span className={`text-xs sm:text-sm font-semibold tabular-nums ${isRecebido ? 'text-emerald-400' : 'text-white'}`}>
+                {formatCurrency(remaining)}
+              </span>
+              {(paid > 0 && !isRecebido) && (
+                <p className="text-[10px] text-emerald-400">Pago: {formatCurrency(paid)}</p>
+              )}
+            </div>
+            
+            {!isRecebido && (
+              <button 
+                onClick={() => setPartialPayment(isPayingPartial ? null : { id: item.id, amount: '' })} 
+                className="text-slate-500 hover:text-amber-400 p-1 transition"
+                title="Abater Valor"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            
+            <button onClick={() => handleDelete(item.id)} className="text-slate-600 hover:text-rose-400 p-1 transition">
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className={valueClass}>
-            {formatCurrency(item.value)}
-          </span>
-          <button onClick={() => handleDelete(item.id)} className="text-slate-600 hover:text-rose-400 p-1 transition">
-            <Trash2 className="w-4 h-4"></Trash2>
-          </button>
-        </div>
+        {/* Área expansível para pagamento parcial */}
+        {isPayingPartial && (
+          <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center gap-2">
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Valor a abater"
+              className="input-base text-sm py-1.5 h-auto w-32"
+              value={partialPayment.amount}
+              onChange={(e) => setPartialPayment({ ...partialPayment, amount: e.target.value })}
+              autoFocus
+            />
+            <button 
+              onClick={() => handlePartialSubmit(item)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-1.5 rounded-lg transition"
+            >
+              Confirmar
+            </button>
+            <button 
+              onClick={() => setPartialPayment(null)}
+              className="text-slate-400 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -149,7 +215,7 @@ export default function AReceber() {
         <div className="card p-4 bg-gradient-to-br from-amber-900/20 to-[#12161A]">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 uppercase tracking-wide">Total Pendente</span>
-            <Clock className="w-4 h-4 text-amber-400"></Clock>
+            <Clock className="w-4 h-4 text-amber-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-amber-400 tabular-nums">{formatCurrency(totalPendente)}</p>
         </div>
@@ -157,7 +223,7 @@ export default function AReceber() {
         <div className="card p-4 bg-gradient-to-br from-emerald-900/20 to-[#12161A]">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 uppercase tracking-wide">Total Recebido</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-400"></CheckCircle2>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="mt-2 text-2xl font-bold text-emerald-400 tabular-nums">{formatCurrency(totalRecebido)}</p>
         </div>
@@ -208,7 +274,7 @@ export default function AReceber() {
           </div>
         </div>
         <button type="submit" className="btn-primary w-full sm:w-auto flex items-center justify-center gap-1.5">
-          <Plus className="w-4 h-4"></Plus>
+          <Plus className="w-4 h-4" />
           <span>Cadastrar Pendencia</span>
         </button>
       </form>

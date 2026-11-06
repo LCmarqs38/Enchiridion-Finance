@@ -52,12 +52,15 @@ export default function Orcamento() {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
-
+  
     const spending: Record<string, number> = {};
     transactions.forEach((tx) => {
       if (tx.type !== 'saida') return;
-      
-      const txDate = new Date(tx.date);
+  
+      // Quebra a string "YYYY-MM-DD" e cria a data forçando o fuso local
+      const [year, month, day] = tx.date.split('-');
+      const txDate = new Date(Number(year), Number(month) - 1, Number(day));
+  
       if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) {
         spending[tx.category] = (spending[tx.category] || 0) + tx.value;
       }

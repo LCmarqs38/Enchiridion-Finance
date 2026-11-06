@@ -44,9 +44,10 @@ export type Receivable = {
   id: string;
   description: string;
   value: number;
+  paidValue?: number;
   dueDate: string;
   client: string;
-  status: 'pendente' | 'recebido';
+  status: 'pendente' | 'recebido' | 'parcial';
 };
 export const initialReceivables: Receivable[] = [];
 
