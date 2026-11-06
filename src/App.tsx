@@ -42,7 +42,7 @@ export default function App() {
         const confirmImport = window.confirm(
           'Isto irá substituir todos os seus dados atuais pelo backup. Deseja continuar?'
         );
-
+        
         if (!confirmImport) {
           e.target.value = '';
           return;
@@ -52,14 +52,15 @@ export default function App() {
         if (data.budgets) localStorage.setItem('pf_budgets', JSON.stringify(data.budgets));
         if (data.receivables) localStorage.setItem('pf_receivables', JSON.stringify(data.receivables));
         if (data.categories) localStorage.setItem('pf_categories', JSON.stringify(data.categories));
+        if (data.investments) localStorage.setItem('pf_investments', JSON.stringify(data.investments));
 
         alert('Backup restaurado com sucesso!');
-        window.location.reload();
+        window.location.reload(); 
       } catch (error) {
         alert('Erro ao importar. Certifique-se de que o ficheiro é um backup válido (JSON).');
       }
-
-      e.target.value = '';
+      
+      e.target.value = ''; 
     };
     reader.readAsText(file);
   };
@@ -70,8 +71,9 @@ export default function App() {
       budgets: JSON.parse(localStorage.getItem('pf_budgets') || '[]'),
       receivables: JSON.parse(localStorage.getItem('pf_receivables') || '[]'),
       categories: JSON.parse(localStorage.getItem('pf_categories') || '[]'),
+      investments: JSON.parse(localStorage.getItem('pf_investments') || '[]'),
     };
-
+    
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -89,10 +91,10 @@ export default function App() {
     );
     if (!confirmReset) return;
 
-    // Inicializa apenas as coleções que estamos efetivamente a usar
     localStorage.setItem('pf_transactions', JSON.stringify([]));
     localStorage.setItem('pf_receivables', JSON.stringify([]));
     localStorage.setItem('pf_budgets', JSON.stringify([]));
+    localStorage.setItem('pf_investments', JSON.stringify([]));
 
     window.location.reload();
   };
@@ -197,7 +199,7 @@ export default function App() {
         {/* Top App Bar — mobile only */}
         <header className="lg:hidden sticky top-0 z-40 bg-[#090A0F]/95 backdrop-blur-md border-b border-slate-800/80 px-4 h-14 flex items-center justify-between">
           <span className="text-sm font-bold text-white tracking-wide uppercase">Painel Financeiro</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             
             {/* Ícone de Restaurar Backup (Mobile) */}
             <label className="icon-btn p-2 text-slate-400 hover:text-emerald-400 cursor-pointer" title="Restaurar Backup">
