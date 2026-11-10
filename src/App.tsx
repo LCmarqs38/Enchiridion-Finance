@@ -7,14 +7,17 @@ import Investimentos from '@/pages/Investimentos';
 import AReceber from '@/pages/AReceber';
 import Login from '@/pages/Login';
 import NavItem from '@/components/NavItem';
+import Anotacoes from '@/pages/Anotacoes';
+import { FileText } from 'lucide-react';
 
-const pages = [
-  { id: 'inicio', label: 'Início', icon: Home, component: Dashboard },
-  { id: 'lancar', label: 'Lançar', icon: PlusCircle, component: Lancamentos },
-  { id: 'orcamento', label: 'Orçamento', icon: PiggyBank, component: Orcamento },
-  { id: 'investir', label: 'Investir', icon: TrendingUp, component: Investimentos },
-  { id: 'areceber', label: 'A receber', icon: Clock, component: AReceber },
-];
+  const pages = [
+    { id: 'inicio', label: 'Início', icon: Home, component: Dashboard },
+    { id: 'lancar', label: 'Lançar', icon: PlusCircle, component: Lancamentos },
+    { id: 'orcamento', label: 'Orçamento', icon: PiggyBank, component: Orcamento },
+    { id: 'investir', label: 'Investir', icon: TrendingUp, component: Investimentos },
+    { id: 'areceber', label: 'A receber', icon: Clock, component: AReceber },
+    { id: 'anotacoes', label: 'Notas', icon: FileText, component: Anotacoes },
+  ];
 
 export default function App() {
   const [active, setActive] = useState('inicio');
