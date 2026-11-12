@@ -258,7 +258,6 @@ const ToggleComponent = ({ node, updateAttributes }: any) => {
           className="flex-1 bg-transparent font-semibold text-[#F1F5F9] placeholder-[#64748B] focus:outline-none text-sm md:text-base"
         />
       </div>
-      {/* Mantém o NodeViewContent sempre montado no DOM para o ProseMirror não perder a referência */}
       <div className={open ? 'pl-6 mt-1.5 border-l border-[#1E293B]' : 'hidden'}>
         <NodeViewContent />
       </div>
@@ -589,7 +588,100 @@ export const IndentExtension = Extension.create({
 });
 
 // ============================================================================
-// 8. FÁBRICA COMPLETA DE EXTENSÕES DO ENCHIRIDION
+// 8. TASK ITEM CUSTOMIZADO (MARCA CHECKBOX SEM ABRIR TECLADO E SEM ROLAR TELA)
+// ============================================================================
+const CustomTaskItem = TaskItem.extend({
+  addNodeView() {
+    return ({ node, HTMLAttributes, getPos, editor }) => {
+      const listItem = document.createElement('li');
+      const checkboxWrapper = document.createElement('label');
+      const checkboxStyler = document.createElement('span');
+      const checkbox = document.createElement('input');
+      const content = document.createElement('div');
+
+      checkboxWrapper.contentEditable = 'false';
+      checkbox.type = 'checkbox';
+      checkbox.tabIndex = -1;
+
+      // Impede que o clique no checkbox foque o contenteditable ou mova o cursor do editor
+      checkboxWrapper.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      checkboxWrapper.addEventListener('pointerdown', (event) => {
+        event.stopPropagation();
+      });
+      checkboxWrapper.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+
+      checkbox.addEventListener('change', (event) => {
+        event.stopPropagation();
+        if (!editor.isEditable || typeof getPos !== 'function') return;
+
+        const savedScrollY = window.scrollY;
+
+        // Remove qualquer foco residual do editor no celular antes de despachar a atualização
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        checkbox.blur();
+
+        const position = getPos();
+        if (typeof position !== 'number') return;
+
+        const currentNode = editor.state.doc.nodeAt(position);
+        if (!currentNode) return;
+
+        const { checked } = event.target as HTMLInputElement;
+        const tr = editor.state.tr.setNodeMarkup(position, undefined, {
+          ...currentNode.attrs,
+          checked,
+        });
+        tr.setMeta('scrollIntoView', false);
+
+        // Despacha apenas a mudança de atributo sem chamar editor.focus()
+        editor.view.dispatch(tr);
+
+        requestAnimationFrame(() => {
+          if (Math.abs(window.scrollY - savedScrollY) > 2) {
+            window.scrollTo({ top: savedScrollY, behavior: 'instant' as ScrollBehavior });
+          }
+        });
+      });
+
+      Object.entries(this.options.HTMLAttributes).forEach(([key, value]) => {
+        listItem.setAttribute(key, value);
+      });
+
+      listItem.dataset.checked = String(Boolean(node.attrs.checked));
+      checkbox.checked = Boolean(node.attrs.checked);
+
+      Object.entries(HTMLAttributes).forEach(([key, value]) => {
+        listItem.setAttribute(key, value);
+      });
+
+      checkboxWrapper.append(checkbox, checkboxStyler);
+      listItem.append(checkboxWrapper, content);
+
+      return {
+        dom: listItem,
+        contentDOM: content,
+        update: (updatedNode) => {
+          if (updatedNode.type !== this.type) {
+            return false;
+          }
+          listItem.dataset.checked = String(Boolean(updatedNode.attrs.checked));
+          checkbox.checked = Boolean(updatedNode.attrs.checked);
+          return true;
+        },
+      };
+    };
+  },
+});
+
+// ============================================================================
+// 9. FÁBRICA COMPLETA DE EXTENSÕES DO ENCHIRIDION
 // ============================================================================
 export function createEnchiridionExtensions() {
   return [
@@ -610,7 +702,7 @@ export function createEnchiridionExtensions() {
       },
     }),
     TaskList,
-    TaskItem.configure({
+    CustomTaskItem.configure({
       nested: true,
     }),
     Table.configure({ resizable: true }),
