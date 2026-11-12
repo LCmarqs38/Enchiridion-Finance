@@ -28,8 +28,187 @@ import {
   Sparkles,
   Type,
   ChevronDown,
+  Calculator,
 } from 'lucide-react';
 import { NOTION_COLORS } from './types';
+
+// ============================================================================
+// MOTOR DE CÁLCULO AUTOMÁTICO (SOMA, SUBTRAÇÃO, MULTIPLICAÇÃO, DIVISÃO)
+// ============================================================================
+export interface MathSummary {
+  numbers: number[];
+  hasCurrency: boolean;
+  expressionResult: number | null;
+  sum: number;
+  subtraction: number;
+  multiplication: number;
+  division: number | null;
+  average: number;
+}
+
+// Localiza a posição exata logo abaixo do bloco atual mantendo-se dentro da mesma coluna/container
+export function getSafeBlockInsertPos($pos: any): number {
+  for (let d = $pos.depth; d >= 1; d--) {
+    const parentName = $pos.node(d - 1).type.name;
+    if (
+      parentName === 'doc' ||
+      parentName === 'column' ||
+      parentName === 'calloutBlock' ||
+      parentName === 'toggleBlock' ||
+      parentName === 'blockquote' ||
+      parentName === 'tableCell' ||
+      parentName === 'tableHeader'
+    ) {
+      return $pos.after(d);
+    }
+  }
+  return $pos.end();
+}
+
+export function parseBrazilianNumber(raw: string): number | null {
+  const cleaned = raw.replace(/[R$\s]/g, '').trim();
+  if (!cleaned) return null;
+
+  let normalized = cleaned;
+  if (cleaned.includes('.') && cleaned.includes(',')) {
+    // Ex: 1.500,50 -> 1500.50
+    normalized = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (cleaned.includes(',')) {
+    // Ex: 1500,50 -> 1500.50
+    normalized = cleaned.replace(',', '.');
+  } else if (/^-?\d{1,3}(?:\.\d{3})+$/.test(cleaned)) {
+    // Ex: 1.500 (milhar sem centavos) -> 1500
+    normalized = cleaned.replace(/\./g, '');
+  }
+
+  const val = Number(normalized);
+  return Number.isFinite(val) ? val : null;
+}
+
+export function formatMathValue(val: number, asCurrency = true): string {
+  const formatted = val.toLocaleString('pt-BR', {
+    minimumFractionDigits: asCurrency || !Number.isInteger(val) ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+  return asCurrency ? `R$ ${formatted}` : formatted;
+}
+
+// Avalia expressões matemáticas seguras como "1500 - 80 - 485" ou "(188,30 + 149,99) / 2"
+export function evaluateMathExpression(rawText: string): {
+  result: number;
+  hasCurrency: boolean;
+} | null {
+  const hasCurrency = /R\$/i.test(rawText);
+  const withoutEquals = rawText.replace(/=\s*$/, '').trim();
+
+  // Extrai o trecho final que contém números e operadores matemáticos
+  const match = withoutEquals.match(/([R$\s\d.,()+*/-]+[\d,.)])\s*$/);
+  const candidate = match ? match[1] : withoutEquals;
+
+  // Precisa ter ao menos um operador matemático real (+, -, *, /) entre números
+  if (!/[+*/]|\d\s*-\s*[R$\s]*\d/.test(candidate)) {
+    return null;
+  }
+
+  const sanitized = candidate
+    .replace(/R\$/gi, '')
+    .replace(/\d+(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d+\.\d+|\d+/g, (numMatch) => {
+      const parsed = parseBrazilianNumber(numMatch);
+      return parsed !== null ? String(parsed) : numMatch;
+    })
+    .replace(/[^0-9.+\-*/()\s]/g, '')
+    .trim();
+
+  if (!sanitized || !/\d/.test(sanitized)) return null;
+
+  try {
+    const fn = new Function(`return (${sanitized});`);
+    const res = Number(fn());
+    if (Number.isFinite(res)) {
+      return { result: res, hasCurrency };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+// Extrai números de múltiplas linhas ou colunas e calcula +, -, *, /
+export function analyzeTextNumbers(text: string): MathSummary | null {
+  const hasCurrency = /R\$/i.test(text);
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const numbers: number[] = [];
+
+  for (const line of lines) {
+    // Ignora linhas que já são de Total/Restante/Resultado para não duplicar a conta
+    if (/^(total|restante|saldo|resultado|média|media)\s*:/i.test(line)) {
+      continue;
+    }
+
+    // Prioriza valores com R$ na linha (evita capturar números de nomes como "7x1" ou "2 colunas")
+    const currencyMatches = Array.from(
+      line.matchAll(/(-?\s*R\$\s*\d+(?:\.\d{3})*(?:,\d+)?)/gi)
+    );
+
+    if (currencyMatches.length > 0) {
+      for (const m of currencyMatches) {
+        const isNegative = m[0].trim().startsWith('-') || line.startsWith('-');
+        const val = parseBrazilianNumber(m[0].replace('-', ''));
+        if (val !== null) {
+          numbers.push(isNegative ? -Math.abs(val) : val);
+        }
+      }
+      continue;
+    }
+
+    // Caso não tenha R$, busca números decimais ou no final da linha (ex: "Internet: 149,99")
+    const numberMatches = Array.from(
+      line.matchAll(
+        /(?:^|[\s:+-])(-?\d+(?:\.\d{3})*,\d+|-?\d+(?:\.\d{3})+|-?\d+(?:\.\d+)?)(?=\s|$)/g
+      )
+    );
+    if (numberMatches.length > 0) {
+      const lastMatch = numberMatches[numberMatches.length - 1][1];
+      const val = parseBrazilianNumber(lastMatch);
+      if (val !== null) {
+        numbers.push(val);
+      }
+    }
+  }
+
+  const exprEval = lines.length === 1 ? evaluateMathExpression(lines[0]) : null;
+
+  if (numbers.length === 0 && !exprEval) return null;
+
+  const absNumbers = numbers.map((n) => Math.abs(n));
+  const sum = numbers.reduce((acc, n) => acc + n, 0);
+  const subtraction =
+    absNumbers.length >= 2
+      ? absNumbers[0] - absNumbers.slice(1).reduce((acc, n) => acc + n, 0)
+      : sum;
+  const multiplication =
+    absNumbers.length >= 2 ? absNumbers.reduce((acc, n) => acc * n, 1) : sum;
+  const division =
+    absNumbers.length >= 2 && absNumbers[1] !== 0
+      ? absNumbers[0] / absNumbers[1]
+      : null;
+  const average = numbers.length > 0 ? sum / numbers.length : 0;
+
+  return {
+    numbers,
+    hasCurrency: hasCurrency || Boolean(exprEval?.hasCurrency),
+    expressionResult: exprEval ? exprEval.result : null,
+    sum,
+    subtraction,
+    multiplication,
+    division,
+    average,
+  };
+}
 
 // ============================================================================
 // 1. BUBBLE TOOLBAR (BARRA FLUTUANTE DE SELEÇÃO DE TEXTO)
@@ -46,7 +225,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
   onCreateSubpage,
 }) => {
   const [coords, setCoords] = useState<{ x: number; y: number } | null>(null);
-  const [openMenu, setOpenMenu] = useState<'none' | 'turnInto' | 'color' | 'link'>('none');
+  const [openMenu, setOpenMenu] = useState<'none' | 'turnInto' | 'color' | 'link' | 'calc'>('none');
   const [linkUrl, setLinkUrl] = useState('');
   const [recentColors, setRecentColors] = useState<string[]>([
     '#D44C47',
@@ -64,7 +243,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
     // Ignora seleções automáticas de blocos (como Subpágina) e seleções sem texto real
     const isNodeSelection = 'node' in selection && Boolean((selection as any).node);
-    const selectedText = doc.textBetween(from, to, ' ');
+    const selectedText = doc.textBetween(from, to, '\n');
 
     if (empty || from === to || isNodeSelection || !selectedText.trim()) {
       setCoords((prev) => (prev ? null : prev));
@@ -75,7 +254,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     try {
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
-      const toolbarWidth = Math.min(360, window.innerWidth - 20);
+      const toolbarWidth = Math.min(390, window.innerWidth - 20);
       const x = Math.max(
         10,
         Math.min(
@@ -84,8 +263,11 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )
       );
 
-      // Se estiver muito perto do topo da janela, posiciona abaixo da seleção para não cobrir o texto
-      const y = start.top - 48 < 12 ? Math.min(window.innerHeight - 60, end.bottom + 10) : start.top - 48;
+      // Se estiver perto do topo da janela, abre abaixo da seleção para não cobrir o texto
+      const y =
+        start.top - 48 < 12
+          ? Math.min(window.innerHeight - 60, end.bottom + 10)
+          : start.top - 48;
 
       setCoords((prev) => {
         if (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1) {
@@ -103,7 +285,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
     const handleTransaction = () => {
       updateSelection();
-      // Só força atualização dos botões ativos quando houver texto selecionado visível
       if (!editor.state.selection.empty) {
         setFormatTick((t) => t + 1);
       }
@@ -176,9 +357,48 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     setOpenMenu('none');
   };
 
-  const getSelectedText = () => {
+  const getSelectedText = (separator = ' ') => {
     const { from, to } = editor.state.selection;
-    return editor.state.doc.textBetween(from, to, ' ');
+    return editor.state.doc.textBetween(from, to, separator);
+  };
+
+  const mathSummary = analyzeTextNumbers(getSelectedText('\n'));
+
+  const insertCalculationResult = (label: string, value: number, asCurrency: boolean) => {
+    const { state } = editor;
+    const { from, to } = state.selection;
+
+    // Recua até o último caractere real selecionado para não pular linhas vazias nem sair da coluna
+    let safeTo = to;
+    while (safeTo > from) {
+      const charBefore = state.doc.textBetween(safeTo - 1, safeTo, '');
+      if (charBefore.trim().length > 0) {
+        break;
+      }
+      safeTo--;
+    }
+
+    const $end = state.doc.resolve(safeTo);
+    const insertPos = getSafeBlockInsertPos($end);
+    const formatted = formatMathValue(value, asCurrency);
+
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(insertPos, {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text: `${label}: ${formatted}`,
+            marks: [{ type: 'bold' }],
+          },
+        ],
+      })
+      .run();
+
+    setOpenMenu('none');
+    setCoords(null);
   };
 
   const turnIntoItems = [
@@ -320,7 +540,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     <div
       style={{ left: coords.x, top: coords.y }}
       onMouseDown={(e) => {
-        // Permite clicar normalmente no input de URL sem perder a seleção nos demais botões
         if ((e.target as HTMLElement).tagName !== 'INPUT') {
           e.preventDefault();
         }
@@ -540,6 +759,145 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
+      {/* Botão Calculadora Automática (+, -, ×, ÷) quando houver números na seleção */}
+      {mathSummary && (
+        <>
+          <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenMenu(openMenu === 'calc' ? 'none' : 'calc')}
+              className={`flex items-center gap-1 px-2 py-1 rounded transition font-semibold ${
+                openMenu === 'calc'
+                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40'
+                  : 'hover:bg-[#222A33] text-emerald-400'
+              }`}
+              title="Calcular valores selecionados (Soma, Subtração, Multiplicação, Divisão)"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Calcular</span>
+            </button>
+
+            {openMenu === 'calc' && (
+              <div
+                className={`absolute right-0 ${dropdownPositionClass} w-64 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-2 space-y-1 z-50`}
+              >
+                <div className="px-2 py-1 text-[10px] text-[#94A3B8] uppercase font-semibold flex items-center justify-between">
+                  <span>Cálculo Automático</span>
+                  <span>{mathSummary.numbers.length} val.</span>
+                </div>
+
+                {mathSummary.expressionResult !== null && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      insertCalculationResult(
+                        'Resultado',
+                        mathSummary.expressionResult!,
+                        mathSummary.hasCurrency
+                      )
+                    }
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-left"
+                  >
+                    <span className="text-[#F1F5F9] font-medium">Expressão (=)</span>
+                    <span className="font-bold text-emerald-400">
+                      {formatMathValue(mathSummary.expressionResult, mathSummary.hasCurrency)}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    insertCalculationResult('Total', mathSummary.sum, mathSummary.hasCurrency)
+                  }
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
+                >
+                  <span className="text-[#94A3B8]">Soma (+)</span>
+                  <span className="font-bold text-emerald-400">
+                    {formatMathValue(mathSummary.sum, mathSummary.hasCurrency)}
+                  </span>
+                </button>
+
+                {mathSummary.numbers.length >= 2 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertCalculationResult(
+                          'Restante',
+                          mathSummary.subtraction,
+                          mathSummary.hasCurrency
+                        )
+                      }
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
+                    >
+                      <span className="text-[#94A3B8]">Subtração / Saldo (-)</span>
+                      <span className="font-bold text-amber-400">
+                        {formatMathValue(mathSummary.subtraction, mathSummary.hasCurrency)}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertCalculationResult(
+                          'Total',
+                          mathSummary.multiplication,
+                          mathSummary.hasCurrency
+                        )
+                      }
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
+                    >
+                      <span className="text-[#94A3B8]">Multiplicação (×)</span>
+                      <span className="font-bold text-blue-400">
+                        {formatMathValue(mathSummary.multiplication, mathSummary.hasCurrency)}
+                      </span>
+                    </button>
+
+                    {mathSummary.division !== null && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          insertCalculationResult(
+                            'Divisão',
+                            mathSummary.division!,
+                            mathSummary.hasCurrency
+                          )
+                        }
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
+                      >
+                        <span className="text-[#94A3B8]">Divisão (÷)</span>
+                        <span className="font-bold text-purple-400">
+                          {formatMathValue(mathSummary.division, mathSummary.hasCurrency)}
+                        </span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertCalculationResult(
+                          'Média',
+                          mathSummary.average,
+                          mathSummary.hasCurrency
+                        )
+                      }
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
+                    >
+                      <span className="text-[#94A3B8]">Média por item</span>
+                      <span className="font-semibold text-[#F1F5F9]">
+                        {formatMathValue(mathSummary.average, mathSummary.hasCurrency)}
+                      </span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
 
       {/* Botão Comentário */}
@@ -571,6 +929,7 @@ interface SlashCommandMenuProps {
   initialQuery?: string;
   onClose: () => void;
   onCreateSubpage: () => void;
+  onAutoCalculate?: (mode: 'sum' | 'subtraction') => void;
 }
 
 export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
@@ -581,6 +940,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   initialQuery = '',
   onClose,
   onCreateSubpage,
+  onAutoCalculate,
 }) => {
   const [filter, setFilter] = useState(initialQuery);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -600,6 +960,21 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 
   const items = useMemo(
     () => [
+      // Cálculo Rápido
+      {
+        group: 'Cálculo Automático',
+        label: 'Somar valores (+)',
+        desc: 'Soma automaticamente os valores da coluna ou lista.',
+        icon: Calculator,
+        action: () => onAutoCalculate?.('sum'),
+      },
+      {
+        group: 'Cálculo Automático',
+        label: 'Calcular saldo / subtração (-)',
+        desc: 'Subtrai as despesas do primeiro valor (ex: Salário - Gastos).',
+        icon: Calculator,
+        action: () => onAutoCalculate?.('subtraction'),
+      },
       // Blocos Básicos
       {
         group: 'Blocos básicos',
@@ -795,7 +1170,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         },
       },
     ],
-    [editor, onCreateSubpage]
+    [editor, onCreateSubpage, onAutoCalculate]
   );
 
   const filtered = useMemo(() => {
@@ -803,7 +1178,9 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
     if (!q) return items;
     return items.filter(
       (item) =>
-        item.label.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q)
+        item.label.toLowerCase().includes(q) ||
+        item.desc.toLowerCase().includes(q) ||
+        item.group.toLowerCase().includes(q)
     );
   }, [items, filter]);
 
@@ -848,7 +1225,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
             filtered[selectedIndex].action();
             onClose();
           } else if (e.key === 'Backspace' && filter === '') {
-            // Fecha o menu se o usuário apagar o filtro vazio e devolve o foco ao editor
             onClose();
             editor.commands.focus();
           } else if (e.key === 'Escape') {
@@ -857,7 +1233,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
             editor.commands.focus();
           }
         }}
-        placeholder="Filtrar blocos..."
+        placeholder="Filtrar blocos ou calcular..."
         autoFocus
         className="w-full bg-[#12161A] border border-[#1E293B] rounded-lg px-2.5 py-1.5 text-xs text-[#F1F5F9] placeholder-[#94A3B8] mb-2 focus:outline-none"
       />

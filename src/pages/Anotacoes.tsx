@@ -20,6 +20,11 @@ import {
   ArrowDown,
   PanelLeftClose,
   PanelLeftOpen,
+  CheckSquare,
+  Bold,
+  Calculator,
+  Indent,
+  Outdent,
 } from 'lucide-react';
 import { NotePage, PAGE_ICONS, PAGE_COVERS } from '@/notes/types';
 import {
@@ -30,7 +35,14 @@ import {
   markdownToTiptapJSON,
 } from '@/notes/migrationAndStorage';
 import { createEnchiridionExtensions, PageBridgeContext, PageBridge } from '@/notes/extensions';
-import { BubbleToolbar, SlashCommandMenu } from '@/notes/Menus';
+import {
+  BubbleToolbar,
+  SlashCommandMenu,
+  evaluateMathExpression,
+  analyzeTextNumbers,
+  formatMathValue,
+  getSafeBlockInsertPos,
+} from '@/notes/Menus';
 
 // ============================================================================
 // TIPAGENS INTERNAS
@@ -98,7 +110,7 @@ export default function Anotacoes() {
   const [searchQuery, setSearchQuery] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  // 2. Estados de Interface (Sidebar inicia recolhida no celular e aberta no PC)
+  // 2. Estados de Interface (Acordeão inicia recolhido no celular e aberto no PC)
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
@@ -110,7 +122,11 @@ export default function Anotacoes() {
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedQuoteForComment, setSelectedQuoteForComment] = useState<string | undefined>();
 
-  // 3. Estados dos Menus Flutuantes do Editor e Gutter ("+" e "::")
+  // 3. Estados da Barra Rápida Mobile (acima do teclado)
+  const [editorFocused, setEditorFocused] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  // 4. Estados dos Menus Flutuantes do Editor e Gutter ("+" e "::")
   const [slashMenu, setSlashMenu] = useState<SlashMenuState>({
     visible: false,
     x: 0,
@@ -130,7 +146,7 @@ export default function Anotacoes() {
     targetPos: -1,
   });
 
-  // 4. Referências para evitar Stale Closures nos callbacks do Tiptap
+  // 5. Referências para evitar Stale Closures nos callbacks do Tiptap
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const activePageIdRef = useRef<string>(activePageId);
@@ -145,7 +161,7 @@ export default function Anotacoes() {
     [pages, activePageId]
   );
 
-  // Seleciona página e fecha a gaveta automaticamente no mobile
+  // Seleciona página e recolhe automaticamente o acordeão no celular
   const handleSelectPage = useCallback((id: string) => {
     setActivePageId(id);
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -163,30 +179,122 @@ export default function Anotacoes() {
     slashMenuVisibleRef.current = slashMenu.visible;
   }, [slashMenu.visible]);
 
-  // 5. Inicialização do Motor Tiptap
+  // Monitora a altura do teclado virtual no celular via visualViewport
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const handleViewportChange = () => {
+      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardOffset(offset);
+    };
+    vv.addEventListener('resize', handleViewportChange);
+    vv.addEventListener('scroll', handleViewportChange);
+    return () => {
+      vv.removeEventListener('resize', handleViewportChange);
+      vv.removeEventListener('scroll', handleViewportChange);
+    };
+  }, []);
+
+  // 6. Inicialização do Motor Tiptap com Avaliação Automática ao digitar "=" + Espaço/Enter
   const extensions = useMemo(() => createEnchiridionExtensions(), []);
 
   const editor = useEditor({
     extensions,
     content: activePage?.content || { type: 'doc', content: [{ type: 'paragraph' }] },
+    onFocus: () => setEditorFocused(true),
+    onBlur: () => {
+      setTimeout(() => setEditorFocused(false), 180);
+    },
     editorProps: {
       attributes: {
         class:
           'tiptap focus:outline-none min-h-[55vh] text-[#F1F5F9] text-sm md:text-[1.1rem] leading-relaxed',
       },
       handleKeyDown: (view, event) => {
+        // Abre menu "/" apenas no início da linha (permite usar "/" em datas, divisões e textos como Netflix/HBO)
         if (event.key === '/' && !slashMenuVisibleRef.current) {
-          setTimeout(() => {
-            const { from } = view.state.selection;
-            const coords = view.coordsAtPos(from);
-            setSlashMenu({
-              visible: true,
-              x: coords.left,
-              y: coords.bottom + 6,
-              query: '',
-            });
-          }, 10);
+          const { $from } = view.state.selection;
+          const textBefore = $from.parent.textBetween(0, $from.parentOffset, '');
+          if (textBefore.trim() === '') {
+            setTimeout(() => {
+              const { from } = view.state.selection;
+              const coords = view.coordsAtPos(from);
+              setSlashMenu({
+                visible: true,
+                x: coords.left,
+                y: coords.bottom + 6,
+                query: '',
+              });
+            }, 10);
+          }
+          return false;
         }
+
+        // Destrava o Backspace em torno de blocos de colunas (columnList)
+        if (event.key === 'Backspace') {
+          const { state, dispatch } = view;
+          const { empty, $from } = state.selection;
+
+          if (empty && $from.parentOffset === 0) {
+            // Caso 1: Cursor no início de um parágrafo logo abaixo de um bloco de colunas
+            if ($from.depth === 1 && $from.index(0) > 0) {
+              const prevNode = state.doc.child($from.index(0) - 1);
+              if (prevNode.type.name === 'columnList') {
+                const currNode = $from.parent;
+                const currStart = $from.before(1);
+                const currEnd = $from.after(1);
+
+                event.preventDefault();
+                if (currNode.textContent.trim() === '') {
+                  // Se a linha estiver vazia, apaga a linha
+                  dispatch(state.tr.delete(currStart, currEnd));
+                } else {
+                  // Se tiver texto (ex: Total que caiu fora da coluna), move para o final da última coluna
+                  const insertInsideColPos = currStart - 2;
+                  const tr = state.tr.delete(currStart, currEnd);
+                  dispatch(tr.insert(insertInsideColPos, currNode));
+                }
+                return true;
+              }
+            }
+
+            // Caso 2: Cursor no primeiro parágrafo de uma coluna quando todo o columnList está vazio
+            for (let d = $from.depth; d >= 1; d--) {
+              if ($from.node(d).type.name === 'columnList') {
+                const colListNode = $from.node(d);
+                if (colListNode.textContent.trim() === '' && $from.index(d - 1) >= 0) {
+                  event.preventDefault();
+                  const start = $from.before(d);
+                  const end = $from.after(d);
+                  const pNode = state.schema.nodes.paragraph.create();
+                  dispatch(state.tr.replaceWith(start, end, pNode));
+                  return true;
+                }
+                break;
+              }
+            }
+          }
+        }
+
+        // Cálculo automático em linha quando termina com "=" e aperta Espaço ou Enter
+        // Ex: "1500 - 80 - 485 - 200 =" -> "1500 - 80 - 485 - 200 = R$ 735,00"
+        if (event.key === ' ' || event.key === 'Enter') {
+          const { $from, empty } = view.state.selection;
+          if (empty) {
+            const lineTextBeforeCursor = $from.parent.textBetween(0, $from.parentOffset, '');
+            if (lineTextBeforeCursor.trimEnd().endsWith('=')) {
+              const evaluated = evaluateMathExpression(lineTextBeforeCursor);
+              if (evaluated) {
+                event.preventDefault();
+                const formatted = formatMathValue(evaluated.result, evaluated.hasCurrency);
+                const prefix = lineTextBeforeCursor.endsWith(' ') ? '' : ' ';
+                view.dispatch(view.state.tr.insertText(`${prefix}${formatted}`));
+                return true;
+              }
+            }
+          }
+        }
+
         return false;
       },
     },
@@ -200,7 +308,166 @@ export default function Anotacoes() {
     },
   });
 
-  // 6. Sincronização de Conteúdo ao Alternar de Página
+  // Executa cálculo automático mantendo o resultado sempre dentro da mesma coluna/bloco
+  const triggerSmartCalculation = useCallback(
+    (defaultMode: 'sum' | 'subtraction' = 'sum') => {
+      if (!editor) return;
+      const { state } = editor;
+      const { from, to, empty, $from } = state.selection;
+
+      // 1. Se houver texto selecionado, calcula o trecho e insere logo abaixo dentro da mesma coluna
+      if (!empty && from !== to) {
+        const selectedText = state.doc.textBetween(from, to, '\n');
+        const summary = analyzeTextNumbers(selectedText);
+        if (summary) {
+          const val =
+            summary.expressionResult !== null
+              ? summary.expressionResult
+              : defaultMode === 'subtraction'
+              ? summary.subtraction
+              : summary.sum;
+          const label =
+            summary.expressionResult !== null
+              ? 'Resultado'
+              : defaultMode === 'subtraction'
+              ? 'Restante'
+              : 'Total';
+
+          let safeTo = to;
+          while (safeTo > from) {
+            const charBefore = state.doc.textBetween(safeTo - 1, safeTo, '');
+            if (charBefore.trim().length > 0) break;
+            safeTo--;
+          }
+
+          const $end = state.doc.resolve(safeTo);
+          const insertPos = getSafeBlockInsertPos($end);
+
+          editor
+            .chain()
+            .focus()
+            .insertContentAt(insertPos, {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'text',
+                  text: `${label}: ${formatMathValue(val, summary.hasCurrency)}`,
+                  marks: [{ type: 'bold' }],
+                },
+              ],
+            })
+            .run();
+        }
+        return;
+      }
+
+      // 2. Se a linha atual tiver uma expressão matemática (ex: "1500 - 80 - 485"), resolve na mesma linha
+      const currentLineText = $from.parent.textContent;
+      const lineEval = evaluateMathExpression(currentLineText);
+      if (lineEval) {
+        const endOfLinePos = $from.end();
+        const suffix = currentLineText.trimEnd().endsWith('=')
+          ? ` ${formatMathValue(lineEval.result, lineEval.hasCurrency)}`
+          : ` = ${formatMathValue(lineEval.result, lineEval.hasCurrency)}`;
+        editor.chain().focus().insertContentAt(endOfLinePos, suffix).run();
+        return;
+      }
+
+      // 3. Caso contrário, lê todos os valores da coluna/lista atual do topo do bloco até o cursor
+      let containerText = '';
+      for (let d = $from.depth; d >= 1; d--) {
+        const node = $from.node(d);
+        if (
+          node.type.name === 'column' ||
+          node.type.name === 'taskList' ||
+          node.type.name === 'bulletList' ||
+          node.type.name === 'orderedList' ||
+          node.type.name === 'toggleBlock' ||
+          node.type.name === 'calloutBlock'
+        ) {
+          containerText = state.doc.textBetween($from.start(d), $from.end(), '\n');
+          break;
+        }
+      }
+      if (!containerText) {
+        containerText = state.doc.textBetween(0, $from.end(), '\n');
+      }
+
+      const summary = analyzeTextNumbers(containerText);
+      if (!summary || summary.numbers.length === 0) return;
+
+      const value = defaultMode === 'subtraction' ? summary.subtraction : summary.sum;
+      const label = defaultMode === 'subtraction' ? 'Restante' : 'Total';
+      const formatted = formatMathValue(value, summary.hasCurrency);
+
+      if (currentLineText.trim() === '') {
+        editor
+          .chain()
+          .focus()
+          .insertContent({
+            type: 'text',
+            text: `${label}: ${formatted}`,
+            marks: [{ type: 'bold' }],
+          })
+          .run();
+      } else {
+        const insertPos = getSafeBlockInsertPos($from);
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(insertPos, {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: `${label}: ${formatted}`,
+                marks: [{ type: 'bold' }],
+              },
+            ],
+          })
+          .run();
+      }
+    },
+    [editor]
+  );
+
+  // Funções de recuo (Tab / Shift+Tab) para os botões da Barra Rápida Mobile
+  const handleMobileIndent = (direction: 'in' | 'out') => {
+    if (!editor) return;
+    if (editor.isActive('taskItem')) {
+      if (direction === 'in') editor.chain().focus().sinkListItem('taskItem').run();
+      else editor.chain().focus().liftListItem('taskItem').run();
+      return;
+    }
+    if (editor.isActive('listItem')) {
+      if (direction === 'in') editor.chain().focus().sinkListItem('listItem').run();
+      else editor.chain().focus().liftListItem('listItem').run();
+      return;
+    }
+
+    const { state, dispatch } = editor.view;
+    const { from, to } = state.selection;
+    let tr = state.tr;
+    let changed = false;
+
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type.name === 'paragraph' || node.type.name === 'heading') {
+        const currentIndent = node.attrs.indent || 0;
+        const nextIndent =
+          direction === 'in' ? Math.min(6, currentIndent + 1) : Math.max(0, currentIndent - 1);
+        if (nextIndent !== currentIndent) {
+          tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: nextIndent });
+          changed = true;
+        }
+        return false;
+      }
+    });
+
+    if (changed && dispatch) dispatch(tr);
+    editor.commands.focus();
+  };
+
+  // 7. Sincronização de Conteúdo ao Alternar de Página
   useEffect(() => {
     if (!editor || !activePage) return;
     const currentJSON = JSON.stringify(editor.getJSON());
@@ -216,7 +483,7 @@ export default function Anotacoes() {
     setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   }, [activePage?.id, editor]);
 
-  // 7. Salvamento Automático com Debounce (400ms)
+  // 8. Salvamento Automático com Debounce (400ms)
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -316,13 +583,11 @@ export default function Anotacoes() {
           if (toTrash.has(p.id)) {
             return { ...p, isDeleted: true, updatedAt: Date.now() };
           }
-          // Limpa links órfãos nas páginas que permaneceram ativas
           const cleanedContent = removeDeletedPageLinksFromContent(p.content, toTrash);
           return cleanedContent !== p.content ? { ...p, content: cleanedContent } : p;
         })
       );
 
-      // Se a página aberta atualmente não foi excluída, sincroniza o editor caso ela tivesse um link para a subpágina excluída
       if (editor && activePage && !toTrash.has(activePage.id)) {
         const currentEditorClean = removeDeletedPageLinksFromContent(editor.getJSON(), toTrash);
         if (JSON.stringify(currentEditorClean) !== JSON.stringify(editor.getJSON())) {
@@ -343,7 +608,6 @@ export default function Anotacoes() {
       const target = prev.find((p) => p.id === pageId);
       if (!target) return prev;
 
-      // Se a página-mãe não existir mais ou estiver na lixeira, restaura a página na raiz para não ficar invisível
       const parentValid =
         target.parentId && prev.some((p) => p.id === target.parentId && !p.isDeleted);
 
@@ -433,12 +697,10 @@ export default function Anotacoes() {
     (clientX: number, clientY: number, targetEl: HTMLElement | null) => {
       if (!editorWrapperRef.current || !editor || blockActionMenu.visible) return;
 
-      // 1. Mantém os botões travados enquanto o cursor/toque estiver sobre eles
       if (targetEl?.closest('.gutter-controls')) {
         return;
       }
 
-      // 2. Oculta os controles se estiver sobre uma linha divisória (hr)
       if (targetEl?.tagName === 'HR') {
         setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
         return;
@@ -460,7 +722,6 @@ export default function Anotacoes() {
         const el = blockElements[i];
         const rect = el.getBoundingClientRect();
 
-        // Ancora pela borda da coluna (se dentro de coluna) ou pela margem principal do editor
         const colEl = el.closest('.notion-column') as HTMLElement | null;
         const anchorLeft = colEl
           ? colEl.getBoundingClientRect().left
@@ -477,7 +738,6 @@ export default function Anotacoes() {
             pos = editor.view.posAtDOM(targetForPos, 0);
           } catch {}
 
-          // Garante que o botão "+" nunca seja cortado na borda esquerda no celular nem invada a letra
           const rawLeft = anchorLeft - wrapperRect.left - gutterOffset;
           const safeLeft = Math.max(4, rawLeft);
           const nextTop = rect.top - wrapperRect.top;
@@ -528,7 +788,6 @@ export default function Anotacoes() {
       const $pos = doc.resolve(Math.min(targetPos, doc.content.size));
       let targetDepth = -1;
 
-      // 1. Prioriza itens de lista ou tarefa (li)
       for (let d = $pos.depth; d >= 1; d--) {
         const name = $pos.node(d).type.name;
         if (name === 'taskItem' || name === 'listItem') {
@@ -537,7 +796,6 @@ export default function Anotacoes() {
         }
       }
 
-      // 2. Caso contrário, busca o bloco mais próximo
       if (targetDepth === -1) {
         for (let d = $pos.depth; d >= 1; d--) {
           const name = $pos.node(d).type.name;
@@ -668,7 +926,10 @@ export default function Anotacoes() {
   // ============================================================================
   return (
     <PageBridgeContext.Provider value={pageBridge}>
-      <div className="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-5rem)] text-[#F1F5F9]">
+      <div
+        onClick={closeAllFloatingMenus}
+        className="flex flex-col lg:flex-row gap-3 lg:gap-4 min-h-[calc(100vh-5rem)] text-[#F1F5F9]"
+      >
         <input
           ref={importInputRef}
           type="file"
@@ -678,146 +939,195 @@ export default function Anotacoes() {
         />
 
         {/* ===================================================================
-            SIDEBAR HIERÁRQUICA DE PÁGINAS (RECOLHÍVEL NO MOBILE E PC)
+            ACORDEÃO NO CELULAR ("ENCHIRIDION • PÁGINA") E SIDEBAR NO PC
            =================================================================== */}
-        {sidebarOpen && (
-          <aside className="w-full lg:w-64 bg-[#12161A] border border-[#1E293B] rounded-2xl p-3.5 flex flex-col justify-between shrink-0 select-none">
-            <div>
-              {/* Topo da Sidebar */}
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#1E293B]">
-                <span className="text-xs font-bold tracking-wider text-[#F1F5F9] uppercase">
+        <aside
+          className={`w-full lg:w-64 bg-[#12161A] border border-[#1E293B] rounded-2xl px-3.5 ${
+            sidebarOpen ? 'py-3.5' : 'py-2.5 lg:hidden'
+          } flex flex-col justify-between shrink-0 select-none transition-all`}
+        >
+          <div>
+            {/* Linha Principal "ENCHIRIDION": clicável no celular para expandir/recolher */}
+            <div
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  setSidebarOpen((prev) => !prev);
+                }
+              }}
+              className={`flex items-center justify-between cursor-pointer lg:cursor-default ${
+                sidebarOpen ? 'pb-3 mb-3 border-b border-[#1E293B]' : ''
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-bold tracking-wider text-[#F1F5F9] uppercase shrink-0">
                   ENCHIRIDION
                 </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => createPage(null, 'Nova página', true)}
-                    title="Nova Página Raiz"
-                    className="p-1 hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9] rounded transition"
-                  >
-                    <FolderPlus className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSidebarOpen(false)}
-                    title="Recolher aba de páginas"
-                    className="p-1 hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9] rounded transition inline-flex"
-                  >
-                    <PanelLeftClose className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
 
-              {/* Busca Global */}
-              <div className="relative mb-3">
-                <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-2.5 top-2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar em títulos e notas..."
-                  className="w-full bg-[#181E24] border border-[#1E293B] rounded-lg pl-8 pr-2.5 py-1 text-xs text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none"
-                />
-              </div>
-
-              {/* Resultados da Busca ou Árvore de Páginas */}
-              {searchQuery.trim() !== '' ? (
-                <div className="space-y-1 mb-4 max-h-56 overflow-y-auto">
-                  <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2">
-                    Resultados ({searchResults.length})
+                {/* Quando recolhido no celular, exibe a página atual ao lado de ENCHIRIDION */}
+                {!sidebarOpen && (
+                  <div className="flex items-center gap-1.5 text-xs text-[#94A3B8] truncate lg:hidden">
+                    <span className="text-[#475569]">•</span>
+                    <span>{activePage.icon}</span>
+                    <span className="text-[#F1F5F9] font-medium truncate">
+                      {activePage.title || 'Sem título'}
+                    </span>
                   </div>
-                  {searchResults.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        handleSelectPage(p.id);
-                        setSearchQuery('');
-                      }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#181E24] text-left truncate"
-                    >
-                      <span>{p.icon}</span>
-                      <span className="truncate">{p.title}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  {/* Favoritos */}
-                  {pages.some((p) => p.isFavorite && !p.isDeleted) && (
-                    <div className="mb-4">
-                      <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
-                        Favoritos
-                      </div>
-                      {pages
-                        .filter((p) => p.isFavorite && !p.isDeleted)
-                        .map((fav) => (
-                          <button
-                            key={fav.id}
-                            type="button"
-                            onClick={() => handleSelectPage(fav.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs md:text-sm mb-0.5 transition ${
-                              fav.id === activePage.id
-                                ? 'bg-[#181E24] text-white font-semibold'
-                                : 'text-[#94A3B8] hover:bg-[#181E24] hover:text-[#F1F5F9]'
-                            }`}
-                          >
-                            <span>{fav.icon}</span>
-                            <span className="truncate">{fav.title}</span>
-                          </button>
-                        ))}
-                    </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    createPage(null, 'Nova página', true);
+                  }}
+                  title="Nova Página Raiz"
+                  className="p-1 hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9] rounded transition"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                </button>
+
+                {/* Seta indicadora de acordeão no celular */}
+                <span className="p-1 text-[#94A3B8] lg:hidden">
+                  {sidebarOpen ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
                   )}
+                </span>
 
-                  {/* Lista Hierárquica de Páginas */}
-                  <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
-                    Páginas
-                  </div>
-                  <div className="space-y-0.5 overflow-y-auto max-h-[36vh] lg:max-h-[52vh] pr-1">
-                    {pages
-                      .filter((p) => !p.parentId && !p.isDeleted)
-                      .map((page) => (
-                        <SidebarItem
-                          key={page.id}
-                          page={page}
-                          allPages={pages.filter((p) => !p.isDeleted)}
-                          activeId={activePage.id}
-                          expanded={expandedPages}
-                          onSelect={handleSelectPage}
-                          onToggle={(id) =>
-                            setExpandedPages((prev) => ({ ...prev, [id]: !prev[id] }))
-                          }
-                          onCreateChild={(parentId) => {
-                            const subId = createPage(parentId, 'Subpágina', true);
-                            setPages((prev) =>
-                              prev.map((p) => {
-                                if (p.id !== parentId) return p;
-                                const nextContent: JSONContent = {
-                                  type: 'doc',
-                                  content: [
-                                    ...(p.content.content || []),
-                                    {
-                                      type: 'pageLink',
-                                      attrs: { pageId: subId, title: 'Subpágina' },
-                                    },
-                                    { type: 'paragraph' },
-                                  ],
-                                };
-                                return { ...p, content: nextContent, updatedAt: Date.now() };
-                              })
-                            );
-                          }}
-                          onDuplicate={duplicatePage}
-                          onDelete={softDeletePage}
-                        />
-                      ))}
-                  </div>
-                </>
-              )}
+                {/* Botão de recolher exclusivo para PC */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSidebarOpen(false);
+                  }}
+                  title="Recolher barra lateral"
+                  className="hidden lg:inline-flex p-1 hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9] rounded transition"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Rodapé da Sidebar (Lixeira e Nova Página Raiz) */}
-            <div className="pt-3 border-t border-[#1E293B] space-y-1.5">
+            {/* Conteúdo interno do Acordeão / Sidebar (visível apenas quando aberto) */}
+            {sidebarOpen && (
+              <>
+                {/* Busca Global */}
+                <div className="relative mb-3">
+                  <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-2.5 top-2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar em títulos e notas..."
+                    className="w-full bg-[#181E24] border border-[#1E293B] rounded-lg pl-8 pr-2.5 py-1 text-xs text-[#F1F5F9] placeholder-[#94A3B8] focus:outline-none"
+                  />
+                </div>
+
+                {/* Resultados da Busca ou Árvore de Páginas */}
+                {searchQuery.trim() !== '' ? (
+                  <div className="space-y-1 mb-4 max-h-56 overflow-y-auto">
+                    <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2">
+                      Resultados ({searchResults.length})
+                    </div>
+                    {searchResults.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          handleSelectPage(p.id);
+                          setSearchQuery('');
+                        }}
+                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#181E24] text-left truncate"
+                      >
+                        <span>{p.icon}</span>
+                        <span className="truncate">{p.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    {/* Favoritos */}
+                    {pages.some((p) => p.isFavorite && !p.isDeleted) && (
+                      <div className="mb-4">
+                        <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
+                          Favoritos
+                        </div>
+                        {pages
+                          .filter((p) => p.isFavorite && !p.isDeleted)
+                          .map((fav) => (
+                            <button
+                              key={fav.id}
+                              type="button"
+                              onClick={() => handleSelectPage(fav.id)}
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs md:text-sm mb-0.5 transition ${
+                                fav.id === activePage.id
+                                  ? 'bg-[#181E24] text-white font-semibold'
+                                  : 'text-[#94A3B8] hover:bg-[#181E24] hover:text-[#F1F5F9]'
+                              }`}
+                            >
+                              <span>{fav.icon}</span>
+                              <span className="truncate">{fav.title}</span>
+                            </button>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* Lista Hierárquica de Páginas */}
+                    <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
+                      Páginas
+                    </div>
+                    <div className="space-y-0.5 overflow-y-auto max-h-[36vh] lg:max-h-[52vh] pr-1">
+                      {pages
+                        .filter((p) => !p.parentId && !p.isDeleted)
+                        .map((page) => (
+                          <SidebarItem
+                            key={page.id}
+                            page={page}
+                            allPages={pages.filter((p) => !p.isDeleted)}
+                            activeId={activePage.id}
+                            expanded={expandedPages}
+                            onSelect={handleSelectPage}
+                            onToggle={(id) =>
+                              setExpandedPages((prev) => ({ ...prev, [id]: !prev[id] }))
+                            }
+                            onCreateChild={(parentId) => {
+                              const subId = createPage(parentId, 'Subpágina', true);
+                              setPages((prev) =>
+                                prev.map((p) => {
+                                  if (p.id !== parentId) return p;
+                                  const nextContent: JSONContent = {
+                                    type: 'doc',
+                                    content: [
+                                      ...(p.content.content || []),
+                                      {
+                                        type: 'pageLink',
+                                        attrs: { pageId: subId, title: 'Subpágina' },
+                                      },
+                                      { type: 'paragraph' },
+                                    ],
+                                  };
+                                  return { ...p, content: nextContent, updatedAt: Date.now() };
+                                })
+                              );
+                            }}
+                            onDuplicate={duplicatePage}
+                            onDelete={softDeletePage}
+                          />
+                        ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Rodapé da Sidebar (Lixeira e Nova Página Raiz) */}
+          {sidebarOpen && (
+            <div className="pt-3 mt-3 border-t border-[#1E293B] space-y-1.5">
               <button
                 type="button"
                 onClick={() => setShowTrash(!showTrash)}
@@ -879,36 +1189,27 @@ export default function Anotacoes() {
                 <Plus className="w-3.5 h-3.5" /> Nova Página Raiz
               </button>
             </div>
-          </aside>
-        )}
+          )}
+        </aside>
 
         {/* ===================================================================
             ÁREA PRINCIPAL DO DOCUMENTO (#12161A ENCHIRIDION THEME)
            =================================================================== */}
-        <main
-          onClick={closeAllFloatingMenus}
-          className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative"
-        >
-          {/* Barra Superior: Botão da Aba de Páginas, Breadcrumbs, Status e Opções */}
+        <main className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative">
+          {/* Barra Superior: Breadcrumbs limpos no mobile, Status, Calculadora e Opções */}
           <div className="flex items-center justify-between px-3 sm:px-6 h-12 border-b border-[#1E293B] text-xs select-none">
             <div className="flex items-center gap-1.5 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setSidebarOpen((prev) => !prev)}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition shrink-0 ${
-                  sidebarOpen
-                    ? 'bg-[#181E24] border-[#1E293B] text-[#F1F5F9] lg:hidden'
-                    : 'bg-[#181E24]/80 hover:bg-[#181E24] border-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9]'
-                }`}
-                title={sidebarOpen ? 'Recolher páginas' : 'Abrir páginas'}
-              >
-                {sidebarOpen ? (
-                  <PanelLeftClose className="w-4 h-4" />
-                ) : (
+              {/* Botão de reabrir sidebar visível APENAS no PC quando recolhida */}
+              {!sidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="hidden lg:inline-flex items-center gap-1.5 p-1.5 rounded-lg bg-[#181E24]/80 hover:bg-[#181E24] border border-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] transition shrink-0"
+                  title="Mostrar barra lateral"
+                >
                   <PanelLeftOpen className="w-4 h-4" />
-                )}
-                <span className="lg:hidden font-medium">Páginas</span>
-              </button>
+                </button>
+              )}
 
               {breadcrumbs.map((crumb, idx) => (
                 <React.Fragment key={crumb.id}>
@@ -916,10 +1217,10 @@ export default function Anotacoes() {
                   <button
                     type="button"
                     onClick={() => handleSelectPage(crumb.id)}
-                    className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#181E24] text-[#F1F5F9] truncate max-w-[130px] sm:max-w-[160px]"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#181E24] text-[#F1F5F9] truncate max-w-[150px] sm:max-w-[180px]"
                   >
                     <span>{crumb.icon}</span>
-                    <span className="truncate">{crumb.title || 'Sem título'}</span>
+                    <span className="truncate font-medium">{crumb.title || 'Sem título'}</span>
                   </button>
                 </React.Fragment>
               ))}
@@ -937,6 +1238,16 @@ export default function Anotacoes() {
                 )}
                 {saveStatus === 'error' && <span className="text-rose-400">Erro</span>}
               </span>
+
+              {/* Botão de Cálculo Automático Rápido no topo */}
+              <button
+                type="button"
+                onClick={() => triggerSmartCalculation('sum')}
+                className="p-1.5 rounded hover:bg-[#181E24] text-[#94A3B8] hover:text-emerald-400 transition"
+                title="Calcular linha/coluna atual automaticamente"
+              >
+                <Calculator className="w-4 h-4" />
+              </button>
 
               {/* Favoritar Página */}
               <button
@@ -1062,7 +1373,7 @@ export default function Anotacoes() {
           )}
 
           {/* Corpo Centralizado com Margem Esquerda Calibrada (pl-14 no mobile / sm:px-16 no PC) */}
-          <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 flex-1 flex flex-col">
+          <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 pb-24 flex-1 flex flex-col">
             {/* Cabeçalho da Página: Ícone, Botões Discretos e Título */}
             <div className="group mb-6">
               {/* Seletor de Ícone */}
@@ -1358,6 +1669,112 @@ export default function Anotacoes() {
             </div>
           </div>
 
+          {/* =================================================================
+              BARRA RÁPIDA MOBILE ACIMA DO TECLADO (EXCLUSIVA PARA CELULAR)
+             ================================================================= */}
+          {editorFocused && editor && (
+            <div
+              style={{
+                bottom: keyboardOffset > 0 ? `${keyboardOffset + 8}px` : '4.5rem',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              className="lg:hidden fixed left-2.5 right-2.5 z-40 bg-[#181E24]/95 backdrop-blur-md border border-[#1E293B] rounded-xl shadow-2xl px-2 py-1.5 flex items-center justify-between gap-1 text-xs text-[#F1F5F9] select-none"
+            >
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {/* Abrir Menu de Blocos (+) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { from } = editor.state.selection;
+                    const coords = editor.view.coordsAtPos(from);
+                    setSlashMenu({
+                      visible: true,
+                      x: coords.left,
+                      y: coords.bottom + 6,
+                      query: '',
+                    });
+                  }}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-[#222A33] text-[#F1F5F9] font-medium shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Bloco</span>
+                </button>
+
+                {/* Alternar Tarefa / Checkbox */}
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleTaskList().run()}
+                  className={`p-1.5 rounded-lg shrink-0 ${
+                    editor.isActive('taskList')
+                      ? 'bg-blue-600/20 text-blue-400'
+                      : 'hover:bg-[#222A33] text-[#94A3B8]'
+                  }`}
+                  title="Lista de tarefas"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                </button>
+
+                {/* Diminuir Recuo (Shift+Tab) */}
+                <button
+                  type="button"
+                  onClick={() => handleMobileIndent('out')}
+                  className="p-1.5 rounded-lg hover:bg-[#222A33] text-[#94A3B8] shrink-0"
+                  title="Diminuir recuo"
+                >
+                  <Outdent className="w-4 h-4" />
+                </button>
+
+                {/* Aumentar Recuo (Tab) */}
+                <button
+                  type="button"
+                  onClick={() => handleMobileIndent('in')}
+                  className="p-1.5 rounded-lg hover:bg-[#222A33] text-[#94A3B8] shrink-0"
+                  title="Aumentar recuo (Tab)"
+                >
+                  <Indent className="w-4 h-4" />
+                </button>
+
+                {/* Negrito */}
+                <button
+                  type="button"
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  className={`p-1.5 rounded-lg shrink-0 ${
+                    editor.isActive('bold')
+                      ? 'bg-blue-600/20 text-blue-400'
+                      : 'hover:bg-[#222A33] text-[#94A3B8]'
+                  }`}
+                  title="Negrito"
+                >
+                  <Bold className="w-4 h-4" />
+                </button>
+
+                {/* Cálculo Automático (+ / -) */}
+                <button
+                  type="button"
+                  onClick={() => triggerSmartCalculation('sum')}
+                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold shrink-0"
+                  title="Calcular automaticamente"
+                >
+                  <Calculator className="w-3.5 h-3.5" />
+                  <span>Calc</span>
+                </button>
+              </div>
+
+              {/* Fechar Teclado */}
+              <button
+                type="button"
+                onClick={() => {
+                  editor.commands.blur();
+                  setEditorFocused(false);
+                }}
+                className="px-2 py-1 rounded-lg bg-[#12161A] border border-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] shrink-0"
+                title="Ocultar teclado"
+              >
+                OK
+              </button>
+            </div>
+          )}
+
           {/* Barra Flutuante de Seleção de Texto */}
           <BubbleToolbar
             editor={editor}
@@ -1377,6 +1794,7 @@ export default function Anotacoes() {
             initialQuery={slashMenu.query}
             onClose={() => setSlashMenu((prev) => ({ ...prev, visible: false }))}
             onCreateSubpage={createSubpageInsideEditor}
+            onAutoCalculate={triggerSmartCalculation}
           />
         </main>
       </div>
