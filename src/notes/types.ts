@@ -42,7 +42,7 @@ export interface NotionColor {
 }
 
 export const NOTION_COLORS: NotionColor[] = [
-  { name: 'Padrão', text: '#EDEDED', bg: 'transparent', border: '#373737' },
+  { name: 'Padrão', text: '#F1F5F9', bg: 'transparent', border: '#1E293B' },
   { name: 'Cinza', text: '#9B9A97', bg: '#2F2F2F', border: '#454545' },
   { name: 'Marrom', text: '#BA856F', bg: '#3D2E28', border: '#5A4239' },
   { name: 'Laranja', text: '#D9730D', bg: '#492914', border: '#6B3D1E' },

@@ -59,7 +59,7 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
           e.stopPropagation();
           setCtxMenu({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY });
         }}
-        className="group flex items-center justify-between py-1 px-2 -mx-2 rounded-md hover:bg-[#252525] cursor-pointer transition-colors"
+        className="group flex items-center justify-between py-1 px-2 -mx-2 rounded-md hover:bg-[#181E24] cursor-pointer transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <span className="text-base md:text-xl leading-none">{displayIcon}</span>
@@ -76,7 +76,7 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
         <div
           style={{ left: ctxMenu.x, top: ctxMenu.y + 24 }}
           onMouseLeave={() => setCtxMenu(null)}
-          className="absolute z-50 w-52 bg-[#252525] border border-[#373737] rounded-lg shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
+          className="absolute z-50 w-52 bg-[#181E24] border border-[#1E293B] rounded-lg shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
         >
           <div className="px-2 py-1 text-[10px] text-[#858585] font-semibold uppercase">Página</div>
           <button
@@ -84,7 +84,7 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
               setCtxMenu(null);
               if (pageId) bridge.openPage(pageId);
             }}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#333333] text-left"
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
             <ExternalLink className="w-3.5 h-3.5 text-[#858585]" /> Abrir página
           </button>
@@ -94,7 +94,7 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
               const next = window.prompt('Renomear página:', displayTitle);
               if (next !== null && pageId) bridge.renamePage(pageId, next);
             }}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#333333] text-left"
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
             <Edit2 className="w-3.5 h-3.5 text-[#858585]" /> Renomear
           </button>
@@ -103,11 +103,11 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
               setCtxMenu(null);
               if (pageId) bridge.duplicatePage(pageId);
             }}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#333333] text-left"
+            className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
             <Copy className="w-3.5 h-3.5 text-[#858585]" /> Duplicar
           </button>
-          <div className="border-t border-[#373737] my-1" />
+          <div className="border-t border-[#1E293B] my-1" />
           <button
             onClick={() => {
               setCtxMenu(null);
@@ -199,7 +199,7 @@ const ToggleComponent = ({ node, updateAttributes }: any) => {
         <button
           type="button"
           onClick={() => updateAttributes({ open: !isOpen })}
-          className="p-0.5 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] transition"
+          className="p-0.5 rounded hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] transition"
         >
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -211,7 +211,7 @@ const ToggleComponent = ({ node, updateAttributes }: any) => {
           className="flex-1 bg-transparent text-sm font-medium text-[#EDEDED] placeholder-[#555555] focus:outline-none"
         />
       </div>
-      <div className={`pl-6 mt-1 border-l border-[#2F2F2F] ${isOpen ? 'block' : 'hidden'}`}>
+      <div className={`pl-6 mt-1 border-l border-[#1E293B] ${isOpen ? 'block' : 'hidden'}`}>
         <NodeViewContent className="toggle-content" />
       </div>
     </NodeViewWrapper>
@@ -245,25 +245,25 @@ export const ToggleNode = Node.create({
 // ============================================================================
 const CalloutComponent = ({ node, updateAttributes }: any) => {
   const [showPicker, setShowPicker] = useState(false);
-  const bg = node.attrs.bgColor || '#252525';
+  const bg = node.attrs.bgColor || '#181E24';
 
   return (
     <NodeViewWrapper className="my-2">
       <div
         style={{ backgroundColor: bg }}
-        className="flex items-start gap-3 p-3.5 rounded-lg border border-[#373737] relative"
+        className="flex items-start gap-3 p-3.5 rounded-lg border border-[#1E293B] relative"
       >
         <div className="relative select-none" contentEditable={false}>
           <button
             type="button"
             onClick={() => setShowPicker(!showPicker)}
-            className="text-lg hover:bg-[#333333] p-1 rounded transition"
+            className="text-lg hover:bg-[#222A33] p-1 rounded transition"
             title="Trocar ícone ou cor"
           >
             {node.attrs.icon || '💡'}
           </button>
           {showPicker && (
-            <div className="absolute left-0 top-9 z-50 bg-[#252525] border border-[#373737] rounded-lg p-2 shadow-xl w-52">
+            <div className="absolute left-0 top-9 z-50 bg-[#181E24] border border-[#1E293B] rounded-lg p-2 shadow-xl w-52">
               <div className="text-[10px] text-[#858585] mb-1 uppercase font-semibold">Ícone</div>
               <div className="grid grid-cols-5 gap-1 mb-2">
                 {PAGE_ICONS.slice(0, 10).map((ic) => (
@@ -274,7 +274,7 @@ const CalloutComponent = ({ node, updateAttributes }: any) => {
                       updateAttributes({ icon: ic });
                       setShowPicker(false);
                     }}
-                    className="p-1 hover:bg-[#333333] rounded text-sm"
+                    className="p-1 hover:bg-[#222A33] rounded text-sm"
                   >
                     {ic}
                   </button>
@@ -287,10 +287,10 @@ const CalloutComponent = ({ node, updateAttributes }: any) => {
                     key={c.name}
                     type="button"
                     onClick={() => {
-                      updateAttributes({ bgColor: c.bg === 'transparent' ? '#252525' : c.bg });
+                      updateAttributes({ bgColor: c.bg === 'transparent' ? '#181E24' : c.bg });
                       setShowPicker(false);
                     }}
-                    style={{ backgroundColor: c.bg === 'transparent' ? '#252525' : c.bg }}
+                    style={{ backgroundColor: c.bg === 'transparent' ? '#181E24' : c.bg }}
                     className="w-6 h-6 rounded border border-[#454545]"
                     title={c.name}
                   />
@@ -313,7 +313,7 @@ export const CalloutNode = Node.create({
   addAttributes() {
     return {
       icon: { default: '💡' },
-      bgColor: { default: '#252525' },
+      bgColor: { default: '#181E24' },
     };
   },
   parseHTML() {
@@ -337,7 +337,7 @@ const MathComponent = ({ node, updateAttributes }: any) => {
     <NodeViewWrapper className="my-2 select-none" contentEditable={false}>
       <div
         onClick={() => setEditing(true)}
-        className="p-3 bg-[#202020] hover:bg-[#252525] border border-[#373737] rounded-lg cursor-pointer transition"
+        className="p-3 bg-[#202020] hover:bg-[#181E24] border border-[#1E293B] rounded-lg cursor-pointer transition"
       >
         {editing ? (
           <div className="flex items-center gap-2">
@@ -391,7 +391,7 @@ const BookmarkComponent = ({ node, deleteNode }: any) => {
 
   return (
     <NodeViewWrapper className="my-2 select-none" contentEditable={false}>
-      <div className="flex items-center justify-between p-3 bg-[#202020] hover:bg-[#252525] border border-[#373737] rounded-lg transition group">
+      <div className="flex items-center justify-between p-3 bg-[#202020] hover:bg-[#181E24] border border-[#1E293B] rounded-lg transition group">
         <a
           href={url}
           target="_blank"
@@ -595,7 +595,7 @@ export function createEnchiridionExtensions() {
     TableCell,
     Image.configure({
       HTMLAttributes: {
-        class: 'rounded-lg max-w-full my-3 border border-[#373737]',
+        class: 'rounded-lg max-w-full my-3 border border-[#1E293B]',
       },
     }),
     PageLinkNode,

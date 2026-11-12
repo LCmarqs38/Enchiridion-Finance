@@ -75,7 +75,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
   };
 
   const applyTextColor = (color: string) => {
-    if (color === '#EDEDED') {
+    if (color === '#EDEDED' || color === '#F1F5F9') {
       editor.chain().focus().unsetColor().run();
     } else {
       editor.chain().focus().setColor(color).run();
@@ -100,14 +100,14 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     <div
       style={{ left: coords.x, top: coords.y }}
       onMouseDown={(e) => e.preventDefault()}
-      className="fixed z-50 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1 flex items-center gap-0.5 text-xs text-[#EDEDED] select-none"
+      className="fixed z-50 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1 flex items-center gap-0.5 text-xs text-[#EDEDED] select-none"
     >
       {/* Seletor "Texto normal" (Transformar em) */}
       <div className="relative">
         <button
           type="button"
           onClick={() => setOpenMenu(openMenu === 'turnInto' ? 'none' : 'turnInto')}
-          className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#333333] font-medium transition"
+          className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#222A33] font-medium transition"
         >
           <Type className="w-3.5 h-3.5 text-[#858585]" />
           <span>{currentTypeLabel()}</span>
@@ -115,7 +115,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         </button>
 
         {openMenu === 'turnInto' && (
-          <div className="absolute left-0 top-9 w-56 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1.5 space-y-0.5 max-h-80 overflow-y-auto z-50">
+          <div className="absolute left-0 top-9 w-56 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1.5 space-y-0.5 max-h-80 overflow-y-auto z-50">
             <div className="px-2 py-1 text-[10px] text-[#858585] uppercase font-semibold">Transformar em</div>
             {[
               { label: 'Texto', icon: Type, action: () => editor.chain().focus().setParagraph().run(), active: editor.isActive('paragraph') },
@@ -153,7 +153,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
                   item.action();
                   setOpenMenu('none');
                 }}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#333333] text-left"
+                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
               >
                 <div className="flex items-center gap-2">
                   <item.icon className="w-3.5 h-3.5 text-[#858585]" />
@@ -166,21 +166,21 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
-      <div className="w-[1px] h-4 bg-[#373737] mx-0.5" />
+      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
 
       {/* Botão Paleta de Cores "A" */}
       <div className="relative">
         <button
           type="button"
           onClick={() => setOpenMenu(openMenu === 'color' ? 'none' : 'color')}
-          className="px-2 py-1 rounded hover:bg-[#333333] font-bold border border-[#373737] text-xs"
+          className="px-2 py-1 rounded hover:bg-[#222A33] font-bold border border-[#1E293B] text-xs"
           title="Cor do texto e fundo"
         >
           A
         </button>
 
         {openMenu === 'color' && (
-          <div className="absolute left-0 top-9 w-56 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-3 space-y-3 z-50">
+          <div className="absolute left-0 top-9 w-56 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-3 space-y-3 z-50">
             <div>
               <div className="text-[11px] text-[#858585] mb-1.5 font-medium">Usado recentemente</div>
               <div className="flex items-center gap-1.5">
@@ -190,7 +190,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
                     type="button"
                     onClick={() => applyTextColor(hex)}
                     style={{ color: hex }}
-                    className="w-7 h-7 rounded-md border border-[#373737] hover:border-[#EDEDED] flex items-center justify-center font-bold text-sm bg-[#1F1F1F]"
+                    className="w-7 h-7 rounded-md border border-[#1E293B] hover:border-[#EDEDED] flex items-center justify-center font-bold text-sm bg-[#1F1F1F]"
                   >
                     A
                   </button>
@@ -208,7 +208,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
                     onClick={() => applyTextColor(c.text)}
                     style={{ color: c.text }}
                     title={c.name}
-                    className="w-8 h-8 rounded-md border border-[#373737] hover:border-[#EDEDED] flex items-center justify-center font-bold text-sm bg-[#1F1F1F]"
+                    className="w-8 h-8 rounded-md border border-[#1E293B] hover:border-[#EDEDED] flex items-center justify-center font-bold text-sm bg-[#1F1F1F]"
                   >
                     A
                   </button>
@@ -224,9 +224,9 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
                     key={c.name}
                     type="button"
                     onClick={() => applyBgColor(c.bg)}
-                    style={{ backgroundColor: c.bg === 'transparent' ? '#191919' : c.bg }}
+                    style={{ backgroundColor: c.bg === 'transparent' ? '#12161A' : c.bg }}
                     title={c.name}
-                    className="w-8 h-8 rounded-md border border-[#373737] hover:border-[#EDEDED]"
+                    className="w-8 h-8 rounded-md border border-[#1E293B] hover:border-[#EDEDED]"
                   />
                 ))}
               </div>
@@ -239,7 +239,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
-        className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('bold') ? 'text-blue-400 bg-[#333333]' : ''}`}
+        className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('bold') ? 'text-blue-400 bg-[#222A33]' : ''}`}
         title="Negrito (Ctrl+B)"
       >
         <Bold className="w-3.5 h-3.5" />
@@ -247,7 +247,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('italic') ? 'text-blue-400 bg-[#333333]' : ''}`}
+        className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('italic') ? 'text-blue-400 bg-[#222A33]' : ''}`}
         title="Itálico (Ctrl+I)"
       >
         <Italic className="w-3.5 h-3.5" />
@@ -255,7 +255,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('underline') ? 'text-blue-400 bg-[#333333]' : ''}`}
+        className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('underline') ? 'text-blue-400 bg-[#222A33]' : ''}`}
         title="Sublinhado (Ctrl+U)"
       >
         <UnderlineIcon className="w-3.5 h-3.5" />
@@ -263,7 +263,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
-        className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('strike') ? 'text-blue-400 bg-[#333333]' : ''}`}
+        className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('strike') ? 'text-blue-400 bg-[#222A33]' : ''}`}
         title="Tachado (Ctrl+Shift+X)"
       >
         <Strikethrough className="w-3.5 h-3.5" />
@@ -271,7 +271,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleCode().run()}
-        className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('code') ? 'text-blue-400 bg-[#333333]' : ''}`}
+        className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('code') ? 'text-blue-400 bg-[#222A33]' : ''}`}
         title="Código em linha"
       >
         <Code className="w-3.5 h-3.5" />
@@ -282,20 +282,20 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         <button
           type="button"
           onClick={() => setOpenMenu(openMenu === 'link' ? 'none' : 'link')}
-          className={`p-1.5 rounded hover:bg-[#333333] ${editor.isActive('link') ? 'text-blue-400 bg-[#333333]' : ''}`}
+          className={`p-1.5 rounded hover:bg-[#222A33] ${editor.isActive('link') ? 'text-blue-400 bg-[#222A33]' : ''}`}
           title="Inserir Link (Ctrl+K)"
         >
           <LinkIcon className="w-3.5 h-3.5" />
         </button>
 
         {openMenu === 'link' && (
-          <div className="absolute left-0 top-9 w-60 bg-[#252525] border border-[#373737] rounded-xl p-2 shadow-2xl flex items-center gap-1 z-50">
+          <div className="absolute left-0 top-9 w-60 bg-[#181E24] border border-[#1E293B] rounded-xl p-2 shadow-2xl flex items-center gap-1 z-50">
             <input
               type="url"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
               placeholder="https://..."
-              className="flex-1 bg-[#191919] border border-[#373737] rounded px-2 py-1 text-xs text-[#EDEDED] focus:outline-none"
+              className="flex-1 bg-[#12161A] border border-[#1E293B] rounded px-2 py-1 text-xs text-[#EDEDED] focus:outline-none"
             />
             <button
               type="button"
@@ -316,7 +316,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
-      <div className="w-[1px] h-4 bg-[#373737] mx-0.5" />
+      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
 
       {/* Botão Comentário */}
       <button
@@ -326,7 +326,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
           if (text) onAddComment(text);
           setCoords(null);
         }}
-        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#333333] text-[#EDEDED]"
+        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#222A33] text-[#EDEDED]"
         title="Comentar trecho selecionado"
       >
         <MessageSquare className="w-3.5 h-3.5 text-[#858585]" />
@@ -503,9 +503,9 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   return (
     <div
       style={{ left: Math.min(x, window.innerWidth - 280), top: Math.min(y, window.innerHeight - 360) }}
-      className="fixed z-50 w-64 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl flex flex-col overflow-hidden text-xs text-[#EDEDED]"
+      className="fixed z-50 w-64 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl flex flex-col overflow-hidden text-xs text-[#EDEDED]"
     >
-      <div className="p-2 border-b border-[#373737]">
+      <div className="p-2 border-b border-[#1E293B]">
         <input
           type="text"
           autoFocus
@@ -530,7 +530,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
             }
           }}
           placeholder="Digite para filtrar..."
-          className="w-full bg-[#191919] border border-[#373737] rounded-md px-2.5 py-1.5 text-xs text-[#EDEDED] placeholder-[#858585] focus:outline-none"
+          className="w-full bg-[#12161A] border border-[#1E293B] rounded-md px-2.5 py-1.5 text-xs text-[#EDEDED] placeholder-[#858585] focus:outline-none"
         />
       </div>
 
@@ -552,7 +552,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                   onMouseEnter={() => setSelectedIndex(idx)}
                   onClick={() => executeItem(idx)}
                   className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-left transition ${
-                    idx === selectedIndex ? 'bg-[#333333] text-white' : 'text-[#EDEDED] hover:bg-[#2F2F2F]'
+                    idx === selectedIndex ? 'bg-[#222A33] text-white' : 'text-[#EDEDED] hover:bg-[#1E293B]'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -567,7 +567,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         )}
       </div>
 
-      <div className="px-3 py-1.5 border-t border-[#373737] bg-[#1F1F1F] flex items-center justify-between text-[10px] text-[#858585]">
+      <div className="px-3 py-1.5 border-t border-[#1E293B] bg-[#1F1F1F] flex items-center justify-between text-[10px] text-[#858585]">
         <span>Fechar menu</span>
         <span className="font-mono">esc</span>
       </div>

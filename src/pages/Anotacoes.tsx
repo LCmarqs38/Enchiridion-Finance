@@ -102,7 +102,7 @@ export default function Anotacoes() {
   const [gutter, setGutter] = useState<GutterState>({
     visible: false,
     top: 0,
-    left: -56,
+    left: 8,
     pos: -1,
   });
   const [blockActionMenu, setBlockActionMenu] = useState<BlockActionMenuState>({
@@ -340,15 +340,22 @@ export default function Anotacoes() {
   // ============================================================================
   const handleEditorMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!editorWrapperRef.current || !editor || blockActionMenu.visible) return;
-    const tiptapEl = editorWrapperRef.current.querySelector('.tiptap') as HTMLElement | null;
-    if (!tiptapEl) return;
 
-    // Oculta os controles se o mouse estiver sobre uma linha divisória (hr)
     const targetEl = e.target as HTMLElement;
+
+    // 1. Se o cursor já estiver sobre os botões "+" ou "::", mantém travado sem recalcular nem sumir
+    if (targetEl.closest('.gutter-controls')) {
+      return;
+    }
+
+    // 2. Oculta os controles se o mouse estiver sobre uma linha divisória (hr)
     if (targetEl.tagName === 'HR') {
       setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
       return;
     }
+
+    const tiptapEl = editorWrapperRef.current.querySelector('.tiptap') as HTMLElement | null;
+    if (!tiptapEl) return;
 
     const blockElements = Array.from(
       tiptapEl.querySelectorAll(
@@ -366,8 +373,8 @@ export default function Anotacoes() {
         ? colEl.getBoundingClientRect().left
         : tiptapEl.getBoundingClientRect().left;
 
-      const isWithinY = e.clientY >= rect.top - 3 && e.clientY <= rect.bottom + 3;
-      const isWithinX = e.clientX >= anchorLeft - 68 && e.clientX <= rect.right + 24;
+      const isWithinY = e.clientY >= rect.top - 6 && e.clientY <= rect.bottom + 6;
+      const isWithinX = e.clientX >= anchorLeft - 72 && e.clientX <= rect.right + 28;
 
       if (isWithinY && isWithinX) {
         const wrapperRect = editorWrapperRef.current.getBoundingClientRect();
@@ -386,8 +393,6 @@ export default function Anotacoes() {
         return;
       }
     }
-
-    setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   };
 
   const manipulateBlockAtPos = (action: 'delete' | 'duplicate' | 'up' | 'down', targetPos: number) => {
@@ -479,7 +484,7 @@ export default function Anotacoes() {
       contentStr = jsonToMarkdown(editor.getJSON(), activePage.title);
       mime = 'text/markdown';
     } else if (format === 'html') {
-      contentStr = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activePage.title}</title></head><body style="background:#191919;color:#EDEDED;font-family:sans-serif;padding:2rem;"><h1>${activePage.icon} ${activePage.title}</h1>${editor.getHTML()}</body></html>`;
+      contentStr = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activePage.title}</title></head><body style="background:#12161A;color:#EDEDED;font-family:sans-serif;padding:2rem;"><h1>${activePage.icon} ${activePage.title}</h1>${editor.getHTML()}</body></html>`;
       mime = 'text/html';
     } else {
       contentStr = JSON.stringify(activePage, null, 2);
@@ -549,10 +554,10 @@ export default function Anotacoes() {
             SIDEBAR HIERÁRQUICA DE PÁGINAS
            =================================================================== */}
         {sidebarOpen && (
-          <aside className="w-full lg:w-64 bg-[#191919] border border-[#373737] rounded-2xl p-3.5 flex flex-col justify-between shrink-0 select-none">
+          <aside className="w-full lg:w-64 bg-[#12161A] border border-[#1E293B] rounded-2xl p-3.5 flex flex-col justify-between shrink-0 select-none">
             <div>
               {/* Topo da Sidebar */}
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#373737]">
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#1E293B]">
                 <span className="text-xs font-bold tracking-wider text-[#EDEDED] uppercase">
                   ENCHIRIDION
                 </span>
@@ -561,7 +566,7 @@ export default function Anotacoes() {
                     type="button"
                     onClick={() => createPage(null, 'Nova página', true)}
                     title="Nova Página Raiz"
-                    className="p-1 hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] rounded transition"
+                    className="p-1 hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] rounded transition"
                   >
                     <FolderPlus className="w-4 h-4" />
                   </button>
@@ -569,7 +574,7 @@ export default function Anotacoes() {
                     type="button"
                     onClick={() => setSidebarOpen(false)}
                     title="Recolher barra lateral"
-                    className="p-1 hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] rounded transition lg:inline-flex hidden"
+                    className="p-1 hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] rounded transition lg:inline-flex hidden"
                   >
                     <PanelLeftClose className="w-4 h-4" />
                   </button>
@@ -584,7 +589,7 @@ export default function Anotacoes() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar em títulos e notas..."
-                  className="w-full bg-[#252525] border border-[#373737] rounded-lg pl-8 pr-2.5 py-1 text-xs text-[#EDEDED] placeholder-[#858585] focus:outline-none"
+                  className="w-full bg-[#181E24] border border-[#1E293B] rounded-lg pl-8 pr-2.5 py-1 text-xs text-[#EDEDED] placeholder-[#858585] focus:outline-none"
                 />
               </div>
 
@@ -602,7 +607,7 @@ export default function Anotacoes() {
                         setActivePageId(p.id);
                         setSearchQuery('');
                       }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#252525] text-left truncate"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#181E24] text-left truncate"
                     >
                       <span>{p.icon}</span>
                       <span className="truncate">{p.title}</span>
@@ -624,10 +629,10 @@ export default function Anotacoes() {
                             key={fav.id}
                             type="button"
                             onClick={() => setActivePageId(fav.id)}
-                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs mb-0.5 transition ${
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs md:text-sm mb-0.5 transition ${
                               fav.id === activePage.id
-                                ? 'bg-[#252525] text-white font-semibold'
-                                : 'text-[#858585] hover:bg-[#252525] hover:text-[#EDEDED]'
+                                ? 'bg-[#181E24] text-white font-semibold'
+                                : 'text-[#858585] hover:bg-[#181E24] hover:text-[#EDEDED]'
                             }`}
                           >
                             <span>{fav.icon}</span>
@@ -679,23 +684,23 @@ export default function Anotacoes() {
             </div>
 
             {/* Rodapé da Sidebar (Lixeira e Nova Página Raiz) */}
-            <div className="pt-3 border-t border-[#373737] space-y-1.5">
+            <div className="pt-3 border-t border-[#1E293B] space-y-1.5">
               <button
                 type="button"
                 onClick={() => setShowTrash(!showTrash)}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-[#858585] hover:text-[#EDEDED] hover:bg-[#252525] transition"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-[#858585] hover:text-[#EDEDED] hover:bg-[#181E24] transition"
               >
                 <div className="flex items-center gap-2">
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Lixeira</span>
                 </div>
-                <span className="text-[10px] bg-[#252525] px-1.5 py-0.5 rounded">
+                <span className="text-[10px] bg-[#181E24] px-1.5 py-0.5 rounded">
                   {pages.filter((p) => p.isDeleted).length}
                 </span>
               </button>
 
               {showTrash && (
-                <div className="bg-[#252525] border border-[#373737] rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
+                <div className="bg-[#181E24] border border-[#1E293B] rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
                   {pages.filter((p) => p.isDeleted).length === 0 ? (
                     <div className="text-[11px] text-[#858585] text-center py-2">Lixeira vazia</div>
                   ) : (
@@ -711,7 +716,7 @@ export default function Anotacoes() {
                               type="button"
                               onClick={() => restorePage(del.id)}
                               title="Restaurar"
-                              className="p-1 hover:bg-[#333333] text-emerald-400 rounded"
+                              className="p-1 hover:bg-[#222A33] text-emerald-400 rounded"
                             >
                               <RotateCcw className="w-3 h-3" />
                             </button>
@@ -719,7 +724,7 @@ export default function Anotacoes() {
                               type="button"
                               onClick={() => permanentDeletePage(del.id)}
                               title="Excluir permanentemente"
-                              className="p-1 hover:bg-[#333333] text-rose-400 rounded"
+                              className="p-1 hover:bg-[#222A33] text-rose-400 rounded"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -733,7 +738,7 @@ export default function Anotacoes() {
               <button
                 type="button"
                 onClick={() => createPage(null, 'Nova página', true)}
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#373737] hover:border-[#858585] text-xs text-[#858585] hover:text-[#EDEDED] rounded-xl transition"
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#1E293B] hover:border-[#858585] text-xs text-[#858585] hover:text-[#EDEDED] rounded-xl transition"
               >
                 <Plus className="w-3.5 h-3.5" /> Nova Página Raiz
               </button>
@@ -742,20 +747,20 @@ export default function Anotacoes() {
         )}
 
         {/* ===================================================================
-            ÁREA PRINCIPAL DO DOCUMENTO (#191919 NOTION DARK THEME)
+            ÁREA PRINCIPAL DO DOCUMENTO (#12161A NOTION DARK THEME)
            =================================================================== */}
         <main
           onClick={closeAllFloatingMenus}
-          className="flex-1 bg-[#191919] border border-[#373737] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative"
+          className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative"
         >
           {/* Barra Superior: Breadcrumbs, Status de Salvamento e Opções */}
-          <div className="flex items-center justify-between px-4 sm:px-6 h-12 border-b border-[#2A2A2A] text-xs select-none">
+          <div className="flex items-center justify-between px-4 sm:px-6 h-12 border-b border-[#1E293B] text-xs select-none">
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {!sidebarOpen && (
                 <button
                   type="button"
                   onClick={() => setSidebarOpen(true)}
-                  className="p-1.5 mr-1 hover:bg-[#252525] rounded text-[#858585] hover:text-[#EDEDED]"
+                  className="p-1.5 mr-1 hover:bg-[#181E24] rounded text-[#858585] hover:text-[#EDEDED]"
                   title="Mostrar barra lateral"
                 >
                   <PanelLeftOpen className="w-4 h-4" />
@@ -767,7 +772,7 @@ export default function Anotacoes() {
                   <button
                     type="button"
                     onClick={() => setActivePageId(crumb.id)}
-                    className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#252525] text-[#EDEDED] truncate max-w-[140px]"
+                    className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#181E24] text-[#EDEDED] truncate max-w-[140px]"
                   >
                     <span>{crumb.icon}</span>
                     <span className="truncate">{crumb.title || 'Sem título'}</span>
@@ -792,7 +797,7 @@ export default function Anotacoes() {
               <button
                 type="button"
                 onClick={() => updatePage(activePage.id, { isFavorite: !activePage.isFavorite })}
-                className={`p-1.5 rounded hover:bg-[#252525] transition ${
+                className={`p-1.5 rounded hover:bg-[#181E24] transition ${
                   activePage.isFavorite ? 'text-amber-400' : 'text-[#858585] hover:text-[#EDEDED]'
                 }`}
                 title="Favoritar página"
@@ -804,7 +809,7 @@ export default function Anotacoes() {
               <button
                 type="button"
                 onClick={() => setShowComments(!showComments)}
-                className="p-1.5 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] relative"
+                className="p-1.5 rounded hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] relative"
                 title="Comentários da página"
               >
                 <MessageSquare className="w-4 h-4" />
@@ -820,35 +825,35 @@ export default function Anotacoes() {
                 <button
                   type="button"
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="px-2 py-1 rounded bg-[#252525] hover:bg-[#333333] border border-[#373737] text-xs text-[#EDEDED] flex items-center gap-1"
+                  className="px-2 py-1 rounded bg-[#181E24] hover:bg-[#222A33] border border-[#1E293B] text-xs text-[#EDEDED] flex items-center gap-1"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Opções</span>
                 </button>
 
                 {showExportMenu && (
-                  <div className="absolute right-0 top-8 z-50 w-48 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1.5 space-y-0.5 text-xs">
+                  <div className="absolute right-0 top-8 z-50 w-48 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1.5 space-y-0.5 text-xs">
                     <div className="px-2 py-1 text-[10px] text-[#858585] uppercase font-semibold">
                       Exportar Página
                     </div>
                     <button
                       type="button"
                       onClick={() => handleExportDocument('md')}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#222A33]"
                     >
                       Markdown (.md)
                     </button>
                     <button
                       type="button"
                       onClick={() => handleExportDocument('html')}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#222A33]"
                     >
                       HTML (.html)
                     </button>
                     <button
                       type="button"
                       onClick={() => handleExportDocument('json')}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#222A33]"
                     >
                       JSON (.json)
                     </button>
@@ -858,18 +863,18 @@ export default function Anotacoes() {
                         setShowExportMenu(false);
                         window.print();
                       }}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#222A33]"
                     >
                       Imprimir / Salvar PDF
                     </button>
-                    <div className="border-t border-[#373737] my-1" />
+                    <div className="border-t border-[#1E293B] my-1" />
                     <button
                       type="button"
                       onClick={() => {
                         setShowExportMenu(false);
                         importInputRef.current?.click();
                       }}
-                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#333333] text-emerald-400"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-emerald-400"
                     >
                       <Upload className="w-3.5 h-3.5" /> Importar (.md / .json)
                     </button>
@@ -889,21 +894,21 @@ export default function Anotacoes() {
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }}
-              className="w-full h-40 relative group border-b border-[#373737]"
+              className="w-full h-40 relative group border-b border-[#1E293B]"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="absolute right-4 bottom-3 opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
                 <button
                   type="button"
                   onClick={() => setShowCoverPicker(!showCoverPicker)}
-                  className="px-2.5 py-1 bg-[#191919]/90 hover:bg-[#252525] text-xs rounded border border-[#373737]"
+                  className="px-2.5 py-1 bg-[#12161A]/90 hover:bg-[#181E24] text-xs rounded border border-[#1E293B]"
                 >
                   Alterar capa
                 </button>
                 <button
                   type="button"
                   onClick={() => updatePage(activePage.id, { cover: undefined })}
-                  className="px-2.5 py-1 bg-[#191919]/90 hover:bg-[#252525] text-xs text-rose-400 rounded border border-[#373737]"
+                  className="px-2.5 py-1 bg-[#12161A]/90 hover:bg-[#181E24] text-xs text-rose-400 rounded border border-[#1E293B]"
                 >
                   Remover
                 </button>
@@ -912,7 +917,7 @@ export default function Anotacoes() {
           )}
 
           {/* Corpo Centralizado Estilo Notion */}
-          <div className="max-w-5xl w-full mx-auto px-8 sm:px-16 py-8 flex-1 flex flex-col">
+          <div className="max-w-5xl w-full mx-auto px-6 sm:px-14 py-8 flex-1 flex flex-col">
             {/* Cabeçalho da Página: Ícone, Botões Discretos e Título */}
             <div className="group mb-6">
               {/* Seletor de Ícone */}
@@ -920,14 +925,14 @@ export default function Anotacoes() {
                 <button
                   type="button"
                   onClick={() => setShowIconPicker(!showIconPicker)}
-                  className="text-5xl sm:text-6xl hover:bg-[#252525] p-1.5 rounded-xl transition select-none"
+                  className="text-5xl sm:text-6xl hover:bg-[#181E24] p-1.5 rounded-xl transition select-none"
                   title="Clique para alterar o ícone"
                 >
                   {activePage.icon || '💰'}
                 </button>
 
                 {showIconPicker && (
-                  <div className="absolute left-0 top-20 z-50 bg-[#252525] border border-[#373737] rounded-xl p-2.5 shadow-2xl w-64 grid grid-cols-5 gap-1.5">
+                  <div className="absolute left-0 top-20 z-50 bg-[#181E24] border border-[#1E293B] rounded-xl p-2.5 shadow-2xl w-64 grid grid-cols-5 gap-1.5">
                     {PAGE_ICONS.map((ic) => (
                       <button
                         key={ic}
@@ -936,7 +941,7 @@ export default function Anotacoes() {
                           updatePage(activePage.id, { icon: ic });
                           setShowIconPicker(false);
                         }}
-                        className="text-xl p-1.5 hover:bg-[#333333] rounded-lg transition"
+                        className="text-xl p-1.5 hover:bg-[#222A33] rounded-lg transition"
                       >
                         {ic}
                       </button>
@@ -970,7 +975,7 @@ export default function Anotacoes() {
               {showCoverPicker && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="mb-4 p-2.5 bg-[#252525] border border-[#373737] rounded-xl flex items-center gap-2 overflow-x-auto"
+                  className="mb-4 p-2.5 bg-[#181E24] border border-[#1E293B] rounded-xl flex items-center gap-2 overflow-x-auto"
                 >
                   {PAGE_COVERS.map((cov, idx) => (
                     <button
@@ -1002,7 +1007,7 @@ export default function Anotacoes() {
 
             {/* Painel de Comentários (Se aberto) */}
             {showComments && (
-              <div className="mb-6 bg-[#202020] border border-[#373737] rounded-xl p-4 space-y-3">
+              <div className="mb-6 bg-[#202020] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between text-xs font-semibold text-[#858585] uppercase">
                   <span>Comentários ({activePage.comments?.length || 0})</span>
                   <button
@@ -1044,7 +1049,7 @@ export default function Anotacoes() {
                       }
                     }}
                     placeholder="Escreva um comentário..."
-                    className="flex-1 bg-[#191919] border border-[#373737] rounded-lg px-3 py-1.5 text-xs text-[#EDEDED] focus:outline-none"
+                    className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-lg px-3 py-1.5 text-xs text-[#EDEDED] focus:outline-none"
                   />
                   <button
                     type="button"
@@ -1075,7 +1080,7 @@ export default function Anotacoes() {
                   {(activePage.comments || []).map((c) => (
                     <div
                       key={c.id}
-                      className="p-2.5 bg-[#252525] rounded-lg border border-[#373737] flex items-start justify-between text-xs"
+                      className="p-2.5 bg-[#181E24] rounded-lg border border-[#1E293B] flex items-start justify-between text-xs"
                     >
                       <div>
                         {c.selectedText && (
@@ -1096,7 +1101,7 @@ export default function Anotacoes() {
                             );
                             updatePage(activePage.id, { comments: updated });
                           }}
-                          className="p-1 hover:bg-[#333333] text-emerald-400 rounded"
+                          className="p-1 hover:bg-[#222A33] text-emerald-400 rounded"
                           title="Marcar como resolvido"
                         >
                           <Check className="w-3.5 h-3.5" />
@@ -1109,7 +1114,7 @@ export default function Anotacoes() {
                             );
                             updatePage(activePage.id, { comments: updated });
                           }}
-                          className="p-1 hover:bg-[#333333] text-rose-400 rounded"
+                          className="p-1 hover:bg-[#222A33] text-rose-400 rounded"
                           title="Excluir comentário"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1121,7 +1126,7 @@ export default function Anotacoes() {
               </div>
             )}
 
-            {/* Container do Editor Tiptap com Gutter Lateral ("+" e "::") */}
+            {/* Container do Editor Tiptap com área de captura estendida (-ml-16 pl-16) */}
             <div
               ref={editorWrapperRef}
               onMouseMove={handleEditorMouseMove}
@@ -1130,13 +1135,13 @@ export default function Anotacoes() {
                   setGutter((prev) => ({ ...prev, visible: false }));
                 }
               }}
-              className="relative flex-1"
+              className="relative flex-1 -ml-16 pl-16"
             >
-              {/* Alças "+" e "::" Visíveis no Hover da Linha (Afastadas 56px sem cobrir letras) */}
+              {/* Alças "+" e "::" com ponte de hover contínua até o texto */}
               {gutter.visible && (
                 <div
                   style={{ top: gutter.top, left: gutter.left }}
-                  className="absolute flex items-center gap-0.5 select-none z-20 transition-all duration-75"
+                  className="gutter-controls absolute flex items-center gap-0.5 pr-3 py-0.5 select-none z-20"
                 >
                   <button
                     type="button"
@@ -1153,7 +1158,7 @@ export default function Anotacoes() {
                         query: '',
                       });
                     }}
-                    className="p-1 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED]"
+                    className="p-1 rounded hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED]"
                     title="Clique para inserir bloco"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -1170,7 +1175,7 @@ export default function Anotacoes() {
                         targetPos: gutter.pos,
                       });
                     }}
-                    className="p-1 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] cursor-grab"
+                    className="p-1 rounded hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] cursor-grab"
                     title="Opções e movimentação do bloco"
                   >
                     <GripVertical className="w-3.5 h-3.5" />
@@ -1183,30 +1188,30 @@ export default function Anotacoes() {
                 <div
                   style={{ left: blockActionMenu.x, top: blockActionMenu.y }}
                   onClick={(e) => e.stopPropagation()}
-                  className="fixed z-50 w-48 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
+                  className="fixed z-50 w-48 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
                 >
                   <button
                     type="button"
                     onClick={() => manipulateBlockAtPos('duplicate', blockActionMenu.targetPos)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#222A33] text-left"
                   >
                     <Copy className="w-3.5 h-3.5 text-[#858585]" /> Duplicar bloco
                   </button>
                   <button
                     type="button"
                     onClick={() => manipulateBlockAtPos('up', blockActionMenu.targetPos)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#222A33] text-left"
                   >
                     <ArrowUp className="w-3.5 h-3.5 text-[#858585]" /> Mover para cima
                   </button>
                   <button
                     type="button"
                     onClick={() => manipulateBlockAtPos('down', blockActionMenu.targetPos)}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#222A33] text-left"
                   >
                     <ArrowDown className="w-3.5 h-3.5 text-[#858585]" /> Mover para baixo
                   </button>
-                  <div className="border-t border-[#373737] my-1" />
+                  <div className="border-t border-[#1E293B] my-1" />
                   <button
                     type="button"
                     onClick={() => manipulateBlockAtPos('delete', blockActionMenu.targetPos)}
@@ -1270,10 +1275,10 @@ function SidebarItem({
     <div>
       <div
         onClick={() => onSelect(page.id)}
-        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg text-xs md:text-sm font-medium cursor-pointer transition ${
+        className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs md:text-sm font-medium cursor-pointer transition ${
           isActive
-            ? 'bg-[#252525] text-white font-semibold'
-            : 'text-[#858585] hover:text-[#EDEDED] hover:bg-[#252525]/60'
+            ? 'bg-[#181E24] text-white font-semibold'
+            : 'text-[#858585] hover:text-[#EDEDED] hover:bg-[#181E24]/60'
         }`}
       >
         <div className="flex items-center gap-1.5 truncate">
@@ -1284,7 +1289,7 @@ function SidebarItem({
                 e.stopPropagation();
                 onToggle(page.id);
               }}
-              className="p-0.5 hover:bg-[#333333] rounded text-[#858585] hover:text-[#EDEDED]"
+              className="p-0.5 hover:bg-[#222A33] rounded text-[#858585] hover:text-[#EDEDED]"
             >
               {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             </button>
@@ -1302,7 +1307,7 @@ function SidebarItem({
               e.stopPropagation();
               onCreateChild(page.id);
             }}
-            className="p-1 hover:bg-[#333333] text-[#858585] hover:text-[#EDEDED] rounded"
+            className="p-1 hover:bg-[#222A33] text-[#858585] hover:text-[#EDEDED] rounded"
             title="Adicionar subpágina"
           >
             <Plus className="w-3 h-3" />
@@ -1313,7 +1318,7 @@ function SidebarItem({
               e.stopPropagation();
               onDuplicate(page.id);
             }}
-            className="p-1 hover:bg-[#333333] text-[#858585] hover:text-[#EDEDED] rounded"
+            className="p-1 hover:bg-[#222A33] text-[#858585] hover:text-[#EDEDED] rounded"
             title="Duplicar página"
           >
             <Copy className="w-3 h-3" />
@@ -1325,7 +1330,7 @@ function SidebarItem({
                 e.stopPropagation();
                 onDelete(page.id);
               }}
-              className="p-1 hover:bg-[#333333] text-[#858585] hover:text-rose-400 rounded"
+              className="p-1 hover:bg-[#222A33] text-[#858585] hover:text-rose-400 rounded"
               title="Mover para a lixeira"
             >
               <Trash2 className="w-3 h-3" />
@@ -1335,7 +1340,7 @@ function SidebarItem({
       </div>
 
       {isExpanded && children.length > 0 && (
-        <div className="ml-3 pl-2 border-l border-[#2F2F2F] space-y-0.5 mt-0.5">
+        <div className="ml-3 pl-2 border-l border-[#1E293B] space-y-0.5 mt-0.5">
           {children.map((child) => (
             <SidebarItem
               key={child.id}
