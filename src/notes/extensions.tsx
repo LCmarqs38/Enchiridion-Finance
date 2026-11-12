@@ -1,27 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Node, Extension, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 import Underline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
-import { Color } from '@tiptap/extension-color';
+import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import Link from '@tiptap/extension-link';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
 import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
 import {
-  ChevronRight, ChevronDown, ExternalLink, Trash2, Edit2, Copy,
-  Globe, Sigma, Paperclip
+  ChevronRight,
+  ChevronDown,
+  ExternalLink,
+  Trash2,
+  Copy,
+  Edit3,
+  Globe,
+  Sigma,
 } from 'lucide-react';
-import { PAGE_ICONS, NOTION_COLORS } from './types';
+import { CALLOUT_ICONS } from './types';
 
-// Contexto global leve para comunicação entre os nós do Tiptap e o gerenciador de páginas
+// ============================================================================
+// PONTE DE COMUNICAÇÃO ENTRE O EDITOR E A ÁRVORE DE PÁGINAS
+// ============================================================================
 export interface PageBridge {
   getPageInfo: (id: string) => { title: string; icon: string } | null;
   openPage: (id: string) => void;
@@ -50,69 +58,90 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
   const displayTitle = liveInfo ? liveInfo.title : node.attrs.title || 'Subpágina';
   const displayIcon = liveInfo ? liveInfo.icon : '📄';
 
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handleGlobalClick = () => setCtxMenu(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, [ctxMenu]);
+
   return (
-    <NodeViewWrapper className="my-1 select-none relative" contentEditable={false}>
+    <NodeViewWrapper
+      data-type="page-link"
+      className="my-1 select-none relative"
+      contentEditable={false}
+    >
       <div
         onClick={() => pageId && bridge.openPage(pageId)}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          setCtxMenu({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY });
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width - 210));
+          const y = e.clientY - rect.top;
+          setCtxMenu({ x, y });
         }}
-        className="group flex items-center justify-between py-1 px-2 -mx-2 rounded-md hover:bg-[#181E24] cursor-pointer transition-colors"
+        className="group flex items-center justify-between py-1.5 px-2 -mx-2 rounded-lg hover:bg-[#181E24] cursor-pointer transition-colors"
       >
         <div className="flex items-center gap-2.5">
           <span className="text-base md:text-xl leading-none">{displayIcon}</span>
-          <span className="text-sm md:text-lg font-semibold text-[#EDEDED] border-b border-[#454545] group-hover:border-[#EDEDED] transition-colors">
+          <span className="text-sm md:text-lg font-semibold text-[#F1F5F9] border-b border-[#475569] group-hover:border-[#F1F5F9] transition-colors">
             {displayTitle || 'Sem título'}
           </span>
         </div>
-        <span className="text-[11px] text-[#858585] opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="text-[11px] text-[#94A3B8] opacity-0 group-hover:opacity-100 transition-opacity">
           Botão direito para opções
         </span>
       </div>
 
       {ctxMenu && (
         <div
-          style={{ left: ctxMenu.x, top: ctxMenu.y + 24 }}
+          style={{ left: ctxMenu.x, top: ctxMenu.y + 8 }}
+          onClick={(e) => e.stopPropagation()}
           onMouseLeave={() => setCtxMenu(null)}
-          className="absolute z-50 w-52 bg-[#181E24] border border-[#1E293B] rounded-lg shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
+          className="absolute z-50 w-52 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1 text-xs text-[#F1F5F9] space-y-0.5"
         >
-          <div className="px-2 py-1 text-[10px] text-[#858585] font-semibold uppercase">Página</div>
+          <div className="px-2 py-1 text-[10px] text-[#94A3B8] font-semibold uppercase">
+            Página
+          </div>
           <button
+            type="button"
             onClick={() => {
               setCtxMenu(null);
               if (pageId) bridge.openPage(pageId);
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-[#858585]" /> Abrir página
+            <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8]" /> Abrir página
           </button>
           <button
+            type="button"
             onClick={() => {
               setCtxMenu(null);
-              const next = window.prompt('Renomear página:', displayTitle);
-              if (next !== null && pageId) bridge.renamePage(pageId, next);
+              const next = window.prompt('Novo nome da subpágina:', displayTitle);
+              if (next && next.trim() && pageId) bridge.renamePage(pageId, next.trim());
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
-            <Edit2 className="w-3.5 h-3.5 text-[#858585]" /> Renomear
+            <Edit3 className="w-3.5 h-3.5 text-[#94A3B8]" /> Renomear
           </button>
           <button
+            type="button"
             onClick={() => {
               setCtxMenu(null);
               if (pageId) bridge.duplicatePage(pageId);
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#222A33] text-left"
           >
-            <Copy className="w-3.5 h-3.5 text-[#858585]" /> Duplicar
+            <Copy className="w-3.5 h-3.5 text-[#94A3B8]" /> Duplicar subpágina
           </button>
           <div className="border-t border-[#1E293B] my-1" />
           <button
+            type="button"
             onClick={() => {
               setCtxMenu(null);
-              deleteNode();
               if (pageId) bridge.deletePage(pageId);
+              deleteNode();
             }}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#472222] text-[#D44C47] text-left"
           >
@@ -128,11 +157,18 @@ export const PageLinkNode = Node.create({
   name: 'pageLink',
   group: 'block',
   atom: true,
-  draggable: true,
   addAttributes() {
     return {
-      pageId: { default: '' },
-      title: { default: 'Subpágina' },
+      pageId: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-page-id') || '',
+        renderHTML: (attrs) => ({ 'data-page-id': attrs.pageId }),
+      },
+      title: {
+        default: 'Subpágina',
+        parseHTML: (el) => el.getAttribute('data-title') || 'Subpágina',
+        renderHTML: (attrs) => ({ 'data-title': attrs.title }),
+      },
     };
   },
   parseHTML() {
@@ -147,7 +183,7 @@ export const PageLinkNode = Node.create({
 });
 
 // ============================================================================
-// 2. SISTEMA DE COLUNAS REAIS (columnList + column)
+// 2. SISTEMA DE COLUNAS LADO A LADO (columnList & column)
 // ============================================================================
 export const ColumnNode = Node.create({
   name: 'column',
@@ -157,30 +193,40 @@ export const ColumnNode = Node.create({
     return [{ tag: 'div[data-type="column"]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'column', class: 'notion-column' }), 0];
+    return [
+      'div',
+      mergeAttributes(HTMLAttributes, {
+        'data-type': 'column',
+        class: 'notion-column min-w-0',
+      }),
+      0,
+    ];
   },
 });
 
 export const ColumnListNode = Node.create({
   name: 'columnList',
   group: 'block',
-  content: 'column+',
-  defining: true,
-  isolating: true,
+  content: 'column{2,3}',
   addAttributes() {
     return {
-      columns: { default: 2 },
+      columns: {
+        default: 2,
+        parseHTML: (el) => parseInt(el.getAttribute('data-cols') || '2', 10) || 2,
+      },
     };
   },
   parseHTML() {
     return [{ tag: 'div[data-type="column-list"]' }];
   },
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
+    const cols = node.attrs.columns || 2;
     return [
       'div',
       mergeAttributes(HTMLAttributes, {
         'data-type': 'column-list',
-        class: `notion-column-list cols-${HTMLAttributes.columns || 2}`,
+        'data-cols': cols,
+        class: `notion-column-list notion-cols-${cols}`,
       }),
       0,
     ];
@@ -188,31 +234,33 @@ export const ColumnListNode = Node.create({
 });
 
 // ============================================================================
-// 3. LISTA DE ALTERNANTES / TOGGLE (toggleBlock)
+// 3. LISTA DE ALTERNANTES / TOGGLE BLOCK (toggleBlock)
 // ============================================================================
 const ToggleComponent = ({ node, updateAttributes }: any) => {
-  const isOpen = node.attrs.open !== false;
-
+  const open = Boolean(node.attrs.open);
   return (
-    <NodeViewWrapper className="my-1.5">
+    <NodeViewWrapper data-type="toggle-block" className="my-2">
       <div className="flex items-center gap-1.5" contentEditable={false}>
         <button
           type="button"
-          onClick={() => updateAttributes({ open: !isOpen })}
-          className="p-0.5 rounded hover:bg-[#181E24] text-[#858585] hover:text-[#EDEDED] transition"
+          onClick={() => updateAttributes({ open: !open })}
+          className="p-0.5 rounded hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9] transition"
         >
-          {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
         <input
           type="text"
           value={node.attrs.summary || ''}
           onChange={(e) => updateAttributes({ summary: e.target.value })}
-          placeholder="Título do alternante..."
-          className="flex-1 bg-transparent text-sm font-medium text-[#EDEDED] placeholder-[#555555] focus:outline-none"
+          onKeyDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Alternante..."
+          className="flex-1 bg-transparent font-semibold text-[#F1F5F9] placeholder-[#64748B] focus:outline-none text-sm md:text-base"
         />
       </div>
-      <div className={`pl-6 mt-1 border-l border-[#1E293B] ${isOpen ? 'block' : 'hidden'}`}>
-        <NodeViewContent className="toggle-content" />
+      {/* Mantém o NodeViewContent sempre montado no DOM para o ProseMirror não perder a referência */}
+      <div className={open ? 'pl-6 mt-1.5 border-l border-[#1E293B]' : 'hidden'}>
+        <NodeViewContent />
       </div>
     </NodeViewWrapper>
   );
@@ -222,7 +270,6 @@ export const ToggleNode = Node.create({
   name: 'toggleBlock',
   group: 'block',
   content: 'block+',
-  defining: true,
   addAttributes() {
     return {
       summary: { default: 'Lista de alternantes' },
@@ -241,65 +288,57 @@ export const ToggleNode = Node.create({
 });
 
 // ============================================================================
-// 4. CALLOUT / FRASE DE DESTAQUE (calloutBlock)
+// 4. FRASE DE DESTAQUE / CALLOUT (calloutBlock)
 // ============================================================================
 const CalloutComponent = ({ node, updateAttributes }: any) => {
-  const [showPicker, setShowPicker] = useState(false);
-  const bg = node.attrs.bgColor || '#181E24';
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handleGlobalClick = () => setPickerOpen(false);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, [pickerOpen]);
 
   return (
-    <NodeViewWrapper className="my-2">
+    <NodeViewWrapper
+      data-type="callout-block"
+      style={{ backgroundColor: node.attrs.bgColor || '#181E24' }}
+      className="my-2.5 p-3.5 rounded-xl border border-[#1E293B] flex items-start gap-3 relative"
+    >
       <div
-        style={{ backgroundColor: bg }}
-        className="flex items-start gap-3 p-3.5 rounded-lg border border-[#1E293B] relative"
+        className="relative"
+        contentEditable={false}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative select-none" contentEditable={false}>
-          <button
-            type="button"
-            onClick={() => setShowPicker(!showPicker)}
-            className="text-lg hover:bg-[#222A33] p-1 rounded transition"
-            title="Trocar ícone ou cor"
-          >
-            {node.attrs.icon || '💡'}
-          </button>
-          {showPicker && (
-            <div className="absolute left-0 top-9 z-50 bg-[#181E24] border border-[#1E293B] rounded-lg p-2 shadow-xl w-52">
-              <div className="text-[10px] text-[#858585] mb-1 uppercase font-semibold">Ícone</div>
-              <div className="grid grid-cols-5 gap-1 mb-2">
-                {PAGE_ICONS.slice(0, 10).map((ic) => (
-                  <button
-                    key={ic}
-                    type="button"
-                    onClick={() => {
-                      updateAttributes({ icon: ic });
-                      setShowPicker(false);
-                    }}
-                    className="p-1 hover:bg-[#222A33] rounded text-sm"
-                  >
-                    {ic}
-                  </button>
-                ))}
-              </div>
-              <div className="text-[10px] text-[#858585] mb-1 uppercase font-semibold">Fundo</div>
-              <div className="grid grid-cols-5 gap-1">
-                {NOTION_COLORS.map((c) => (
-                  <button
-                    key={c.name}
-                    type="button"
-                    onClick={() => {
-                      updateAttributes({ bgColor: c.bg === 'transparent' ? '#181E24' : c.bg });
-                      setShowPicker(false);
-                    }}
-                    style={{ backgroundColor: c.bg === 'transparent' ? '#181E24' : c.bg }}
-                    className="w-6 h-6 rounded border border-[#454545]"
-                    title={c.name}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <NodeViewContent className="flex-1 min-w-0 text-sm text-[#EDEDED]" />
+        <button
+          type="button"
+          onClick={() => setPickerOpen((prev) => !prev)}
+          className="text-xl hover:bg-[#222A33] p-1 rounded transition"
+          title="Trocar ícone"
+        >
+          {node.attrs.icon || '💡'}
+        </button>
+        {pickerOpen && (
+          <div className="absolute left-0 top-9 z-40 bg-[#181E24] border border-[#1E293B] rounded-xl p-1.5 shadow-xl flex gap-1">
+            {CALLOUT_ICONS.map((ic) => (
+              <button
+                key={ic}
+                type="button"
+                onClick={() => {
+                  updateAttributes({ icon: ic });
+                  setPickerOpen(false);
+                }}
+                className="p-1 hover:bg-[#222A33] rounded text-base"
+              >
+                {ic}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <NodeViewContent />
       </div>
     </NodeViewWrapper>
   );
@@ -309,7 +348,6 @@ export const CalloutNode = Node.create({
   name: 'calloutBlock',
   group: 'block',
   content: 'block+',
-  defining: true,
   addAttributes() {
     return {
       icon: { default: '💡' },
@@ -328,37 +366,40 @@ export const CalloutNode = Node.create({
 });
 
 // ============================================================================
-// 5. EQUAÇÃO MATEMÁTICA EM BLOCO (mathBlock)
+// 5. EQUAÇÃO MATEMÁTICA (mathBlock)
 // ============================================================================
 const MathComponent = ({ node, updateAttributes }: any) => {
-  const [editing, setEditing] = useState(!node.attrs.latex);
-
+  const [editing, setEditing] = useState(false);
   return (
-    <NodeViewWrapper className="my-2 select-none" contentEditable={false}>
-      <div
-        onClick={() => setEditing(true)}
-        className="p-3 bg-[#202020] hover:bg-[#181E24] border border-[#1E293B] rounded-lg cursor-pointer transition"
-      >
+    <NodeViewWrapper
+      data-type="math-block"
+      contentEditable={false}
+      className="my-2 p-3 rounded-xl bg-[#181E24] border border-[#1E293B] flex items-center justify-between cursor-pointer"
+      onClick={() => setEditing(true)}
+    >
+      <div className="flex items-center gap-2.5 font-mono text-sm text-amber-300 flex-1 mr-3">
+        <Sigma className="w-4 h-4 text-[#94A3B8] shrink-0" />
         {editing ? (
-          <div className="flex items-center gap-2">
-            <Sigma className="w-4 h-4 text-[#858585]" />
-            <input
-              type="text"
-              autoFocus
-              value={node.attrs.latex || ''}
-              onChange={(e) => updateAttributes({ latex: e.target.value })}
-              onBlur={() => setEditing(false)}
-              onKeyDown={(e) => e.key === 'Enter' && setEditing(false)}
-              placeholder="Ex: \sum_{i=1}^{n} R_i - D_i = \text{Saldo}"
-              className="flex-1 bg-transparent text-xs font-mono text-[#EDEDED] focus:outline-none"
-            />
-          </div>
+          <input
+            type="text"
+            autoFocus
+            value={node.attrs.latex || ''}
+            onChange={(e) => updateAttributes({ latex: e.target.value })}
+            onBlur={() => setEditing(false)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter' || e.key === 'Escape') {
+                setEditing(false);
+              }
+            }}
+            className="w-full bg-[#12161A] text-[#F1F5F9] px-2 py-0.5 rounded border border-[#1E293B] focus:outline-none"
+          />
         ) : (
-          <div className="text-center font-serif italic text-base text-[#EDEDED] py-1">
-            {node.attrs.latex || 'Clique para inserir uma equação LaTeX'}
-          </div>
+          <span className="truncate">{node.attrs.latex || 'E = mc^2'}</span>
         )}
       </div>
+      <span className="text-[10px] text-[#94A3B8] shrink-0">LaTeX</span>
     </NodeViewWrapper>
   );
 };
@@ -369,7 +410,9 @@ export const MathNode = Node.create({
   atom: true,
   addAttributes() {
     return {
-      latex: { default: 'E = mc^2' },
+      latex: {
+        default: 'f(x) = \\int_{-\\infty}^{\\infty} \\hat{f}(\\xi)\\,e^{2 \\pi i \\xi x} \\,d\\xi',
+      },
     };
   },
   parseHTML() {
@@ -384,40 +427,30 @@ export const MathNode = Node.create({
 });
 
 // ============================================================================
-// 6. BOOKMARK / ARQUIVO / VÍDEO EMBED (bookmarkBlock)
+// 6. FAVORITO DA WEB / WEB BOOKMARK (bookmarkBlock)
 // ============================================================================
-const BookmarkComponent = ({ node, deleteNode }: any) => {
-  const { url, title, kind, size } = node.attrs;
+const BookmarkComponent = ({ node }: any) => {
+  const rawUrl = (node.attrs.url || '').trim();
+  const safeHref = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl || 'google.com'}`;
+  const title = node.attrs.title || rawUrl || safeHref;
 
   return (
-    <NodeViewWrapper className="my-2 select-none" contentEditable={false}>
-      <div className="flex items-center justify-between p-3 bg-[#202020] hover:bg-[#181E24] border border-[#1E293B] rounded-lg transition group">
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 flex-1 min-w-0"
-        >
-          {kind === 'file' ? (
-            <Paperclip className="w-4 h-4 text-blue-400 shrink-0" />
-          ) : (
-            <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
-          )}
+    <NodeViewWrapper data-type="bookmark-block" contentEditable={false} className="my-2">
+      <a
+        href={safeHref}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center justify-between p-3 rounded-xl bg-[#181E24] hover:bg-[#222A33] border border-[#1E293B] transition group"
+      >
+        <div className="flex items-center gap-3 truncate">
+          <Globe className="w-4 h-4 text-blue-400 shrink-0" />
           <div className="truncate">
-            <div className="text-xs font-semibold text-[#EDEDED] truncate">{title || url}</div>
-            <div className="text-[11px] text-[#858585] truncate">
-              {size ? `${size} • ` : ''}{url}
-            </div>
+            <div className="text-xs font-semibold text-[#F1F5F9] truncate">{title}</div>
+            <div className="text-[11px] text-[#94A3B8] truncate">{safeHref}</div>
           </div>
-        </a>
-        <button
-          type="button"
-          onClick={deleteNode}
-          className="opacity-0 group-hover:opacity-100 p-1 text-[#858585] hover:text-[#D44C47] rounded transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+        </div>
+        <ExternalLink className="w-3.5 h-3.5 text-[#94A3B8] group-hover:text-[#F1F5F9] shrink-0" />
+      </a>
     </NodeViewWrapper>
   );
 };
@@ -430,8 +463,6 @@ export const BookmarkNode = Node.create({
     return {
       url: { default: '' },
       title: { default: '' },
-      kind: { default: 'bookmark' },
-      size: { default: '' },
     };
   },
   parseHTML() {
@@ -449,136 +480,125 @@ export const BookmarkNode = Node.create({
 // 7. IDENTAÇÃO ESTILO NOTION (Tab / Shift+Tab em Parágrafos e Títulos)
 // ============================================================================
 export const IndentExtension = Extension.create({
-    name: 'indent',
-    addGlobalAttributes() {
-      return [
-        {
-          types: ['paragraph', 'heading'],
-          attributes: {
-            indent: {
-              default: 0,
-              keepOnSplit: true, // Mantém a identação na linha seguinte ao apertar Enter
-              parseHTML: (element) => {
-                const attr = element.getAttribute('data-indent');
-                if (attr) return parseInt(attr, 10) || 0;
-                const pl = parseInt(element.style.paddingLeft || '0', 10);
-                return pl ? Math.round(pl / 24) : 0;
-              },
-              renderHTML: (attributes) => {
-                if (!attributes.indent || attributes.indent <= 0) return {};
-                return {
-                  'data-indent': attributes.indent,
-                  style: `padding-left: ${attributes.indent * 24}px`,
-                };
-              },
+  name: 'indent',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading'],
+        attributes: {
+          indent: {
+            default: 0,
+            keepOnSplit: true,
+            parseHTML: (element) => {
+              const attr = element.getAttribute('data-indent');
+              if (attr) return parseInt(attr, 10) || 0;
+              const pl = parseInt(element.style.paddingLeft || '0', 10);
+              return pl ? Math.round(pl / 24) : 0;
+            },
+            renderHTML: (attributes) => {
+              if (!attributes.indent || attributes.indent <= 0) return {};
+              return {
+                'data-indent': attributes.indent,
+                style: `padding-left: ${attributes.indent * 24}px`,
+              };
             },
           },
         },
-      ];
-    },
-    addKeyboardShortcuts() {
-      return {
-        Tab: () => {
-          // Se estiver em lista ou checklist, deixa o comportamento padrão de sub-item
-          if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
-            return false;
-          }
-          const { state, dispatch } = this.editor.view;
-          const { from, to } = state.selection;
-          let tr = state.tr;
-          let changed = false;
-  
-          state.doc.nodesBetween(from, to, (node, pos) => {
-            if (node.type.name === 'paragraph' || node.type.name === 'heading') {
-              const currentIndent = node.attrs.indent || 0;
-              if (currentIndent < 6) {
-                tr = tr.setNodeMarkup(pos, undefined, {
-                  ...node.attrs,
-                  indent: currentIndent + 1,
-                });
-                changed = true;
-              }
-              return false;
-            }
-          });
-  
-          if (changed && dispatch) dispatch(tr);
-          return true; // Impede o navegador de tirar o foco do editor ao apertar Tab
-        },
-        'Shift-Tab': () => {
-          if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
-            return false;
-          }
-          const { state, dispatch } = this.editor.view;
-          const { from, to } = state.selection;
-          let tr = state.tr;
-          let changed = false;
-  
-          state.doc.nodesBetween(from, to, (node, pos) => {
-            if (node.type.name === 'paragraph' || node.type.name === 'heading') {
-              const currentIndent = node.attrs.indent || 0;
-              if (currentIndent > 0) {
-                tr = tr.setNodeMarkup(pos, undefined, {
-                  ...node.attrs,
-                  indent: currentIndent - 1,
-                });
-                changed = true;
-              }
-              return false;
-            }
-          });
-  
-          if (changed && dispatch) dispatch(tr);
-          return true;
-        },
-        Backspace: () => {
-          const { state, dispatch } = this.editor.view;
-          const { empty, $from } = state.selection;
-          if (!empty || $from.parentOffset !== 0) return false;
-  
-          const node = $from.parent;
-          if (
-            (node.type.name === 'paragraph' || node.type.name === 'heading') &&
-            (node.attrs.indent || 0) > 0
-          ) {
-            if (dispatch) {
-              const pos = $from.before();
-              dispatch(
-                state.tr.setNodeMarkup(pos, undefined, {
-                  ...node.attrs,
-                  indent: node.attrs.indent - 1,
-                })
-              );
-            }
-            return true;
-          }
+      },
+    ];
+  },
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
           return false;
-        },
-      };
-    },
-  });
+        }
+        const { state, dispatch } = this.editor.view;
+        const { from, to } = state.selection;
+        let tr = state.tr;
+        let changed = false;
+
+        state.doc.nodesBetween(from, to, (node, pos) => {
+          if (node.type.name === 'paragraph' || node.type.name === 'heading') {
+            const currentIndent = node.attrs.indent || 0;
+            if (currentIndent < 6) {
+              tr = tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                indent: currentIndent + 1,
+              });
+              changed = true;
+            }
+            return false;
+          }
+        });
+
+        if (changed && dispatch) dispatch(tr);
+        return true;
+      },
+      'Shift-Tab': () => {
+        if (this.editor.isActive('listItem') || this.editor.isActive('taskItem')) {
+          return false;
+        }
+        const { state, dispatch } = this.editor.view;
+        const { from, to } = state.selection;
+        let tr = state.tr;
+        let changed = false;
+
+        state.doc.nodesBetween(from, to, (node, pos) => {
+          if (node.type.name === 'paragraph' || node.type.name === 'heading') {
+            const currentIndent = node.attrs.indent || 0;
+            if (currentIndent > 0) {
+              tr = tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                indent: currentIndent - 1,
+              });
+              changed = true;
+            }
+            return false;
+          }
+        });
+
+        if (changed && dispatch) dispatch(tr);
+        return true;
+      },
+      Backspace: () => {
+        const { state, dispatch } = this.editor.view;
+        const { empty, $from } = state.selection;
+        if (!empty || $from.parentOffset !== 0) return false;
+
+        const node = $from.parent;
+        if (
+          (node.type.name === 'paragraph' || node.type.name === 'heading') &&
+          (node.attrs.indent || 0) > 0
+        ) {
+          if (dispatch) {
+            const pos = $from.before();
+            dispatch(
+              state.tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                indent: node.attrs.indent - 1,
+              })
+            );
+          }
+          return true;
+        }
+        return false;
+      },
+    };
+  },
+});
 
 // ============================================================================
-// CONFIGURAÇÃO CENTRAL DAS EXTENSÕES DO TIPTAP
+// 8. FÁBRICA COMPLETA DE EXTENSÕES DO ENCHIRIDION
 // ============================================================================
 export function createEnchiridionExtensions() {
   return [
     StarterKit.configure({
-        heading: { levels: [1, 2, 3, 4] },
-        link: false,
-        underline: false,
-      }),
-    Placeholder.configure({
-      includeChildren: true,
-      placeholder: ({ node }) => {
-        if (node.type.name === 'heading') {
-          return `Título ${node.attrs.level}`;
-        }
-        return "Digite '/' para comandos...";
-      },
+      heading: { levels: [1, 2, 3, 4] },
     }),
-    TaskList,
-    TaskItem.configure({ nested: true }),
+    Placeholder.configure({
+      placeholder: "Digite '/' para comandos...",
+    }),
     Underline,
     TextStyle,
     Color,
@@ -589,13 +609,17 @@ export function createEnchiridionExtensions() {
         class: 'text-blue-400 underline cursor-pointer',
       },
     }),
+    TaskList,
+    TaskItem.configure({
+      nested: true,
+    }),
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,
     TableCell,
     Image.configure({
       HTMLAttributes: {
-        class: 'rounded-lg max-w-full my-3 border border-[#1E293B]',
+        class: 'rounded-xl max-w-full my-3 border border-[#1E293B]',
       },
     }),
     PageLinkNode,

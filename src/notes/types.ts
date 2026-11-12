@@ -1,15 +1,9 @@
-import { JSONContent } from '@tiptap/react';
+import type { JSONContent } from '@tiptap/react';
 
-export interface LegacyBlock {
-  id: string;
-  type: string;
-  content: string;
-  content2?: string;
-  targetPageId?: string;
-  checked?: boolean;
-}
-
-export interface NoteComment {
+// ============================================================================
+// TIPAGENS DE COMENTÁRIOS E PÁGINAS DE NOTAS
+// ============================================================================
+export interface PageComment {
   id: string;
   author: string;
   text: string;
@@ -24,16 +18,28 @@ export interface NotePage {
   icon: string;
   cover?: string;
   parentId: string | null;
-  isFavorite?: boolean;
+  isFavorite: boolean;
   isDeleted?: boolean;
-  content: JSONContent;
-  comments?: NoteComment[];
   createdAt: number;
   updatedAt: number;
-  // Mantido opcionalmente para retrocompatibilidade na leitura inicial
-  blocks?: LegacyBlock[];
+  comments?: PageComment[];
+  content: JSONContent;
 }
 
+export interface LegacyNota {
+  id: string;
+  titulo: string;
+  conteudo: string;
+  categoria?: string;
+  cor?: string;
+  fixada?: boolean;
+  dataCriacao?: string;
+  dataAtualizacao?: string;
+}
+
+// ============================================================================
+// PALETA DE CORES, ÍCONES E CAPAS (TEMA ENCHIRIDION)
+// ============================================================================
 export interface NotionColor {
   name: string;
   text: string;
@@ -43,7 +49,7 @@ export interface NotionColor {
 
 export const NOTION_COLORS: NotionColor[] = [
   { name: 'Padrão', text: '#F1F5F9', bg: 'transparent', border: '#1E293B' },
-  { name: 'Cinza', text: '#9B9A97', bg: '#2F2F2F', border: '#454545' },
+  { name: 'Cinza', text: '#94A3B8', bg: '#222A33', border: '#334155' },
   { name: 'Marrom', text: '#BA856F', bg: '#3D2E28', border: '#5A4239' },
   { name: 'Laranja', text: '#D9730D', bg: '#492914', border: '#6B3D1E' },
   { name: 'Amarelo', text: '#DFAB01', bg: '#473815', border: '#66511F' },
@@ -54,17 +60,20 @@ export const NOTION_COLORS: NotionColor[] = [
   { name: 'Vermelho', text: '#D44C47', bg: '#472222', border: '#693232' },
 ];
 
-export const PAGE_ICONS = [
-  '💰', '📝', '📄', '💸', '📊', '📈', '🏦', '💳', '🏠', '🏍️',
-  '🛒', '🎯', '🚀', '📚', '💡', '⚡', '🔒', '📅', '🗂️', '✅'
+export const PAGE_ICONS: string[] = [
+  '💰', '📝', '📄', '📊', '📈', '🏦', '💳', '🎯', '🚀', '⚡',
+  '📌', '🗂️', '📅', '✅', '🔒', '💡', '🛠️', '📦', '🏠', '🎓',
 ];
 
-export const PAGE_COVERS = [
+export const CALLOUT_ICONS: string[] = [
+  '💡', '⚠️', '📌', '🔥', '✅', '💰', '🚀', '📢',
+];
+
+export const PAGE_COVERS: string[] = [
+  'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
+  'linear-gradient(135deg, #1E382D 0%, #12161A 100%)',
+  'linear-gradient(135deg, #31243E 0%, #12161A 100%)',
+  'linear-gradient(135deg, #492914 0%, #12161A 100%)',
   'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
   'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80',
-  'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
-  'linear-gradient(135deg, #31102F 0%, #191919 100%)',
-  'linear-gradient(135deg, #0f291e 0%, #191919 100%)',
 ];

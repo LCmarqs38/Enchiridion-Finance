@@ -6,23 +6,30 @@
   * {
     -webkit-tap-highlight-color: transparent;
   }
+
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: dark;
   }
+
   body {
     @apply bg-[#090A0F] text-white antialiased;
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     @apply bg-slate-700 rounded-full;
   }
+
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-slate-600;
   }
@@ -32,22 +39,27 @@
   .card {
     @apply bg-[#12161A] border border-slate-800/70 rounded-2xl;
   }
+
   .input-base {
     @apply w-full bg-[#0E1318] border border-slate-700/50 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500
       focus:outline-none focus:ring-2 focus:ring-blue-600/40 focus:border-blue-600 transition;
   }
+
   .label-base {
     @apply block text-xs font-medium text-slate-400 mb-1.5;
   }
+
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-600 active:bg-blue-800
       text-white font-medium text-sm rounded-lg px-4 py-2.5 transition-all duration-200
       disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/20;
   }
+
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700
       text-slate-200 font-medium text-sm rounded-lg px-4 py-2.5 transition;
   }
+
   .icon-btn {
     @apply flex items-center justify-center rounded-lg p-2 text-slate-500
       hover:text-white hover:bg-slate-800 transition-all duration-200;
@@ -57,247 +69,291 @@
 .fade-in {
   animation: fadeIn 0.3s ease;
 }
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .spinner {
   @apply inline-block rounded-full border-2 border-slate-600 border-t-white animate-spin;
 }
 
-/* =========================================================
-   ESTILOS DO EDITOR TIPTAP — NOTION DARK (#191919)
-   ========================================================= */
-   .tiptap {
-    outline: none !important;
-    color: #EDEDED;
-    font-size: 0.875rem; /* 14px no celular */
+/* ==========================================================================
+   ESTILOS DO EDITOR DE BLOCOS TIPTAP (ENCHIRIDION DARK THEME)
+   ========================================================================== */
+.tiptap {
+  outline: none !important;
+  color: #F1F5F9;
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+
+@media (min-width: 768px) {
+  .tiptap {
+    font-size: 1.1rem;
   }
-  
-  @media (min-width: 768px) {
-    .tiptap {
-      font-size: 1.1rem; /* ~17.6px no PC: leitura encorpada igual ao Notion */
-    }
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #64748B;
+  pointer-events: none;
+  height: 0;
+}
+
+.tiptap p {
+  margin: 0.35rem 0;
+  line-height: 1.65;
+}
+
+.tiptap mark {
+  color: inherit;
+  border-radius: 0.25rem;
+  padding: 0.05rem 0.2rem;
+}
+
+.tiptap h1 {
+  font-size: 2.15rem;
+  font-weight: 800;
+  color: #FFFFFF;
+  margin-top: 1.5rem;
+  margin-bottom: 0.45rem;
+  line-height: 1.25;
+}
+
+.tiptap h2 {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #F8FAFC;
+  margin-top: 1.25rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+}
+
+.tiptap h3 {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #F1F5F9;
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.tiptap h4 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #CBD5E1;
+  margin-top: 0.8rem;
+  margin-bottom: 0.2rem;
+}
+
+.tiptap ul:not([data-type="taskList"]) {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.35rem 0;
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.35rem 0;
+}
+
+.tiptap ul:not([data-type="taskList"]) li p,
+.tiptap ol li p {
+  margin: 0.15rem 0;
+}
+
+/* Checklist / TaskList transparente estilo Notion */
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0;
+}
+
+.tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
+  padding-left: 1.5rem;
+  margin: 0.2rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.35rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  height: 1.65em;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  user-select: none;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  border: 1.5px solid #64748B;
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  transition: all 0.15s ease;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
+  border-color: #F1F5F9;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+  background-color: #2563EB;
+  border-color: #2563EB;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"]:checked::before {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #FFFFFF;
+  border-bottom: 2px solid #FFFFFF;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tiptap ul[data-type="taskList"] li > div p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div > p {
+  text-decoration: line-through;
+  color: #64748B;
+}
+
+/* Citações, Código, Divisores e Tabelas */
+.tiptap blockquote {
+  border-left: 3px solid #475569;
+  padding-left: 1rem;
+  color: #94A3B8;
+  font-style: italic;
+  margin: 0.6rem 0;
+}
+
+.tiptap pre {
+  background: #181E24;
+  border: 1px solid #1E293B;
+  border-radius: 0.75rem;
+  color: #F1F5F9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.6rem 0;
+}
+
+.tiptap code {
+  background: #181E24;
+  color: #EB5757;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.88em;
+}
+
+.tiptap pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.tiptap hr {
+  border: none;
+  border-top: 1px solid #1E293B;
+  margin: 1.25rem 0;
+}
+
+.tiptap table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.85rem 0;
+  overflow: hidden;
+}
+
+.tiptap th,
+.tiptap td {
+  border: 1px solid #1E293B;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  min-width: 90px;
+  vertical-align: top;
+  position: relative;
+}
+
+.tiptap th p,
+.tiptap td p {
+  margin: 0;
+}
+
+.tiptap th {
+  background-color: #181E24;
+  font-weight: 600;
+  color: #F1F5F9;
+}
+
+.tiptap .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(37, 99, 235, 0.15);
+  pointer-events: none;
+}
+
+.tiptap .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #2563EB;
+  pointer-events: none;
+}
+
+/* Sistema de 2 e 3 Colunas Reais */
+.notion-column-list {
+  display: grid;
+  gap: 3.5rem;
+  margin: 0.75rem 0;
+  width: 100%;
+}
+
+.notion-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.notion-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 640px) {
+  .notion-cols-2,
+  .notion-cols-3 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
-  
-  .tiptap p {
-    margin: 0.4rem 0;
-    line-height: 1.7;
-  }
-  
-  .tiptap h1 {
-    font-size: 2.15rem;
-    font-weight: 800;
-    color: #FFFFFF;
-    margin-top: 1.5rem;
-    margin-bottom: 0.45rem;
-    line-height: 1.25;
-  }
-  
-  .tiptap h2 {
-    font-size: 1.7rem;
-    font-weight: 700;
-    color: #F5F5F5;
-    margin-top: 1.25rem;
-    margin-bottom: 0.35rem;
-    line-height: 1.3;
-  }
-  
-  .tiptap h3 {
-    font-size: 1.35rem;
-    font-weight: 600;
-    color: #EDEDED;
-    margin-top: 1rem;
-    margin-bottom: 0.25rem;
-  }
-  
-  .tiptap h4 {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: #D4D4D4;
-    margin-top: 0.8rem;
-    margin-bottom: 0.2rem;
-  }
-  
-  /* Placeholder estilo Notion */
-  .tiptap .is-empty::before {
-    color: #555555;
-    content: attr(data-placeholder);
-    float: left;
-    height: 0;
-    pointer-events: none;
-  }
-  
-  /* Listas com marcadores e numeradas */
-  .tiptap ul {
-    list-style-type: disc;
-    padding-left: 1.4rem;
-    margin: 0.4rem 0;
-  }
-  
-  .tiptap ol {
-    list-style-type: decimal;
-    padding-left: 1.4rem;
-    margin: 0.4rem 0;
-  }
-  
-  /* Lista de Tarefas (TaskList) — Transparente e Alinhada como no Notion */
-  ul[data-type="taskList"] {
-    list-style: none;
-    padding-left: 0;
-    margin: 0.35rem 0;
-  }
-  
-  ul[data-type="taskList"] li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.6rem;
-    margin: 0.25rem 0;
-  }
-  
-  ul[data-type="taskList"] li > label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 1.65em; /* Alinha perfeitamente com a altura da linha do texto */
-    user-select: none;
-    flex-shrink: 0;
-    margin: 0;
-  }
-  
-  ul[data-type="taskList"] li > label input[type="checkbox"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    background-color: transparent;
-    border: 1.5px solid #858585;
-    border-radius: 3px;
-    cursor: pointer;
-    margin: 0;
-    transition: background-color 0.12s ease, border-color 0.12s ease;
-  }
-  
-  ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
-    border-color: #EDEDED;
-    background-color: rgba(255, 255, 255, 0.05);
-  }
-  
-  ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
-    background-color: #2383E2;
-    border-color: #2383E2;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
-    background-size: 100% 100%;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
-  
-  ul[data-type="taskList"] li > div {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  
-  /* Remove a margem vertical extra do parágrafo dentro da tarefa para não desalinhar */
-  ul[data-type="taskList"] li > div > p {
-    margin: 0 !important;
-    line-height: 1.65;
-  }
-  
-  ul[data-type="taskList"] li[data-checked="true"] > div {
-    text-decoration: line-through;
-    color: #858585;
-  }
-  
-  /* Citações e Código */
-  .tiptap blockquote {
-    border-left: 3px solid #454545;
-    padding-left: 1rem;
-    margin: 0.75rem 0;
-    color: #D4D4D4;
-    font-style: italic;
-  }
-  
-  .tiptap pre {
-    background: #202020;
-    border: 1px solid #373737;
-    border-radius: 0.5rem;
-    padding: 0.85rem 1rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.85rem;
-    overflow-x: auto;
-    margin: 0.75rem 0;
-  }
-  
-  .tiptap code {
-    background: #2C2C2C;
-    color: #EB5757;
-    padding: 0.15rem 0.35rem;
-    border-radius: 0.25rem;
-    font-size: 0.85em;
-  }
-  
-  .tiptap pre code {
-    background: transparent;
-    color: #EDEDED;
-    padding: 0;
-  }
-  
-  .tiptap hr {
-    border: none;
-    border-top: 1px solid #2F2F2F;
-    margin: 1.25rem 0;
-  }
-  
-  /* Sistema de 2 e 3 Colunas Reais */
-  .notion-column-list {
-    display: grid;
-    gap: 1.5rem;
-    margin: 0.75rem 0;
-    width: 100%;
-  }
-  
-  .notion-column-list.cols-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  
-  .notion-column-list.cols-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  
-  @media (max-width: 768px) {
-    .notion-column-list.cols-2,
-    .notion-column-list.cols-3 {
-      grid-template-columns: 1fr;
-    }
-  }
-  
-  .notion-column {
-    min-width: 0;
-    border-radius: 0.375rem;
-    padding: 0.25rem 0;
-  }
-  
-  /* Tabelas Editáveis */
-  .tiptap table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1rem 0;
-    overflow: hidden;
-    table-layout: fixed;
-  }
-  
-  .tiptap td,
-  .tiptap th {
-    border: 1px solid #373737;
-    padding: 0.5rem 0.75rem;
-    vertical-align: top;
-    position: relative;
-    min-width: 90px;
-  }
-  
-  .tiptap th {
-    background-color: #252525;
-    font-weight: 600;
-    text-align: left;
-  }
+}
