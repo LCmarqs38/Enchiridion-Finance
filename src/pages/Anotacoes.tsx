@@ -1,672 +1,1357 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  CheckSquare, Square, Plus, FolderPlus, ChevronRight, ChevronDown, ChevronLeft,
-  Bold, Italic, Underline as UnderlineIcon, Palette, Heading1, Heading2, Heading3,
-  Quote, Trash2, List, ListOrdered, Type, Columns, GripVertical
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useEditor, EditorContent, JSONContent } from '@tiptap/react';
+import {
+  Plus,
+  Trash2,
+  Search,
+  Star,
+  Image as ImageIcon,
+  MessageSquare,
+  ChevronRight,
+  ChevronDown,
+  GripVertical,
+  Download,
+  Upload,
+  RotateCcw,
+  Check,
+  FolderPlus,
+  Copy,
+  ArrowUp,
+  ArrowDown,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
+import { NotePage, PAGE_ICONS, PAGE_COVERS } from '@/notes/types';
+import {
+  loadAndMigratePages,
+  savePagesToStorage,
+  extractPlainTextFromJSON,
+  jsonToMarkdown,
+  markdownToTiptapJSON,
+} from '@/notes/migrationAndStorage';
+import { createEnchiridionExtensions, PageBridgeContext, PageBridge } from '@/notes/extensions';
+import { BubbleToolbar, SlashCommandMenu } from '@/notes/Menus';
 
-// ==========================================
-// INTERFACES & CONSTANTES
-// ==========================================
-interface Block {
-  id: string;
-  type: 'h1' | 'h2' | 'h3' | 'text' | 'todo' | 'bullet' | 'number' | 'quote' | 'page' | '2-col';
-  content: string;
-  content2?: string;
-  targetPageId?: string;
-  checked?: boolean;
-  listNumber?: number;
+// ============================================================================
+// TIPAGENS INTERNAS DE ESTADO E COMPONENTES
+// ============================================================================
+interface SlashMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  query: string;
 }
 
-interface NotePage {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  parentId: string | null;
-  blocks: Block[];
+interface GutterState {
+  visible: boolean;
+  top: number;
+  left: number;
+  pos: number;
 }
 
-const DEFAULT_PAGES: NotePage[] = [{
-  id: 'root-1', title: 'Caderno Principal', description: 'Adicione uma breve descrição...',
-  icon: '📝', parentId: null, blocks: [{ id: 'b-init', type: 'text', content: '' }]
-}];
+interface BlockActionMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  targetPos: number;
+}
 
-const TEXT_COLORS = [
-  { name: 'Padrão', hex: '#e2e8f0' }, { name: 'Cinza', hex: '#94a3b8' }, { name: 'Azul', hex: '#60a5fa' },
-  { name: 'Verde', hex: '#34d399' }, { name: 'Amarelo', hex: '#fbbf24' }, { name: 'Vermelho', hex: '#fb7185' },
-  { name: 'Roxo', hex: '#c084fc' },
-];
+interface SidebarItemProps {
+  page: NotePage;
+  allPages: NotePage[];
+  activeId: string;
+  expanded: Record<string, boolean>;
+  onSelect: (id: string) => void;
+  onToggle: (id: string) => void;
+  onCreateChild: (parentId: string) => void;
+  onDuplicate: (id: string) => void;
+  onDelete: (id: string) => void;
+}
 
-const BG_COLORS = [
-  { name: 'Transparente', hex: 'transparent' }, { name: 'Cinza Escuro', hex: '#1e293b' }, { name: 'Azul', hex: '#172554' },
-  { name: 'Verde', hex: '#022c22' }, { name: 'Amarelo', hex: '#451a03' }, { name: 'Vermelho', hex: '#4c0519' },
-  { name: 'Roxo', hex: '#3b0764' },
-];
-
-const PLACEHOLDERS: Record<string, string> = {
-  h1: 'Título 1...',
-  h2: 'Título 2...',
-  h3: 'Título 3...',
-  todo: 'Tarefa...',
-  bullet: 'Item da lista...',
-  number: 'Item numerado...',
-  quote: 'Citação...',
-  text: 'Digite algo...'
-};
-
-// ==========================================
-// COMPONENTES AUXILIARES
-// ==========================================
-
-const MenuItem = ({ icon: Icon, label, color = "text-slate-400", onClick, rightIcon: RightIcon }: any) => (
-  <button onClick={onClick} className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-slate-800 text-left">
-    <div className="flex items-center gap-2">
-      <Icon className={`w-3.5 h-3.5 ${color}`} />
-      <span>{label}</span>
-    </div>
-    {RightIcon && <RightIcon className="w-3.5 h-3.5 text-slate-500" />}
-  </button>
-);
-
-const FormatBtn = ({ icon: Icon, active, onClick, color = "text-slate-200" }: any) => (
-  <button onMouseDown={(e) => { e.preventDefault(); onClick(); }} 
-    className={`p-1.5 rounded hover:bg-slate-700 transition-colors ${active ? 'bg-slate-700 text-blue-400' : color}`}>
-    <Icon className="w-3.5 h-3.5" />
-  </button>
-);
-
-const BlockEditor = ({ 
-  domId, htmlContent, blockType, checked, showPlaceholder, placeholderText,
-  onChange, onSelectionCheck, onKeyDown, onFocus 
-}: any) => {
-  const elRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (elRef.current && elRef.current.innerHTML !== htmlContent) {
-      elRef.current.innerHTML = htmlContent;
-    }
-  }, [htmlContent]);
-
-  // Limpa formatação externa ao colar texto (Ctrl + V)
-  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
-  };
-
-  const isTrulyEmpty = !htmlContent || htmlContent === '<br>' || htmlContent.trim() === '';
-
-  return (
-    <div
-      id={domId}
-      ref={elRef}
-      contentEditable
-      suppressContentEditableWarning
-      onFocus={onFocus}
-      onPaste={handlePaste}
-      onInput={(e) => {
-        const val = e.currentTarget.innerHTML;
-        onChange(val === '<br>' ? '' : val);
-      }}
-      onMouseUp={() => onSelectionCheck()}
-      onTouchEnd={() => setTimeout(() => onSelectionCheck(), 100)}
-      onKeyUp={() => onSelectionCheck()}
-      onKeyDown={onKeyDown}
-      data-placeholder={showPlaceholder && isTrulyEmpty ? (placeholderText || PLACEHOLDERS[blockType] || 'Digite algo...') : ''}
-      className={`flex-1 bg-transparent focus:outline-none min-h-[28px] outline-none break-words break-all whitespace-pre-wrap min-w-0 before:content-[attr(data-placeholder)] before:text-slate-600 before:pointer-events-none transition-colors ${
-        blockType === 'h1' ? 'text-2xl font-bold text-white mt-4 mb-2' :
-        blockType === 'h2' ? 'text-xl font-semibold text-slate-100 mt-3 mb-1' :
-        blockType === 'h3' ? 'text-lg font-medium text-slate-200 mt-2 mb-1' :
-        blockType === 'todo' ? `text-sm ${checked ? 'line-through text-slate-500' : 'text-slate-200'}` :
-        blockType === 'quote' ? 'text-sm italic text-amber-200/90 pl-1 py-1' : 'text-sm text-slate-200'
-      }`}
-    />
-  );
-};
-
-// ==========================================
-// COMPONENTE PRINCIPAL
-// ==========================================
+// ============================================================================
+// COMPONENTE PRINCIPAL: ANOTAÇÕES
+// ============================================================================
 export default function Anotacoes() {
-  const [pages, setPages] = useState<NotePage[]>(() => {
-    try { return JSON.parse(localStorage.getItem('enchiridion_notion_pages_v8') || '') || DEFAULT_PAGES; } 
-    catch { return DEFAULT_PAGES; }
+  // 1. Estados de Dados e Navegação
+  const [pages, setPages] = useState<NotePage[]>(() => loadAndMigratePages());
+  const [activePageId, setActivePageId] = useState<string>(() => {
+    const firstValid = pages.find((p) => !p.isDeleted);
+    return firstValid?.id || pages[0]?.id || 'root-1';
   });
-  
-  const [workspaceTitle, setWorkspaceTitle] = useState(() => localStorage.getItem('enchiridion_workspace_title') || 'ENCHIRIDION');
-  const [activePageId, setActivePageId] = useState<string>(() => pages[0]?.id || 'root-1');
-  const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({});
-  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-  
-  // Estados Drag and Drop
-  const [draggableBlockId, setDraggableBlockId] = useState<string | null>(null);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  
-  // Estados de Menus Flutuantes
-  const [formatMenu, setFormatMenu] = useState({ 
-    visible: false, x: 0, y: 0, 
-    blockId: null as string | null, 
-    domId: '' as string,
-    field: 'content' as 'content' | 'content2',
-    activeFormats: { bold: false, italic: false, underline: false } 
-  });
-  const [insertMenu, setInsertMenu] = useState({ visible: false, x: 0, y: 0, blockId: null as string | null, view: 'main' as 'main' | 'titles' | 'lists' });
-  const [showColorPalette, setShowColorPalette] = useState(false);
-  
-  const editorContainerRef = useRef<HTMLDivElement>(null);
-  const activePage = pages.find((p) => p.id === activePageId) || pages[0] || DEFAULT_PAGES[0];
+  const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({ 'root-1': true });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
 
-  useEffect(() => { localStorage.setItem('enchiridion_notion_pages_v8', JSON.stringify(pages)); }, [pages]);
-  useEffect(() => { localStorage.setItem('enchiridion_workspace_title', workspaceTitle); }, [workspaceTitle]);
-  
+  // 2. Estados de Interface e Painéis
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showTrash, setShowTrash] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showCoverPicker, setShowCoverPicker] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [newCommentText, setNewCommentText] = useState('');
+  const [selectedQuoteForComment, setSelectedQuoteForComment] = useState<string | undefined>();
+
+  // 3. Estados de Menus Flutuantes do Editor e Gutter ("+" e "::")
+  const [slashMenu, setSlashMenu] = useState<SlashMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    query: '',
+  });
+  const [gutter, setGutter] = useState<GutterState>({
+    visible: false,
+    top: 0,
+    left: -56,
+    pos: -1,
+  });
+  const [blockActionMenu, setBlockActionMenu] = useState<BlockActionMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    targetPos: -1,
+  });
+
+  // 4. Referências para evitar Stale Closures no Tiptap
+  const editorWrapperRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const activePageIdRef = useRef<string>(activePageId);
+  const slashMenuVisibleRef = useRef<boolean>(slashMenu.visible);
+
+  const activePage = useMemo(
+    () => pages.find((p) => p.id === activePageId && !p.isDeleted) || pages.find((p) => !p.isDeleted) || pages[0],
+    [pages, activePageId]
+  );
+
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement;
-      const selection = window.getSelection();
-      
-      if (formatMenu.visible && !target.closest('.format-menu-container') && (!selection || selection.toString().trim() === '')) {
-        setFormatMenu((prev) => ({ ...prev, visible: false }));
-        setShowColorPalette(false);
-      }
-      if (insertMenu.visible && !target.closest('.insert-menu-container') && !target.closest('.btn-plus')) {
-        setInsertMenu((prev) => ({ ...prev, visible: false }));
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('touchstart', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [formatMenu.visible, insertMenu.visible]);
-
-  // Move o cursor com precisão para o bloco desejado
-  const focusBlock = (domId: string, toEnd = true) => {
-    setTimeout(() => {
-      const el = document.getElementById(domId);
-      if (!el) return;
-      el.focus();
-      const range = document.createRange();
-      const sel = window.getSelection();
-      range.selectNodeContents(el);
-      range.collapse(!toEnd);
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }, 20);
-  };
-
-  // --- HANDLERS: DRAG AND DROP ---
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    setDraggedId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', id);
-  };
-
-  const handleDragOver = (e: React.DragEvent, id: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (dragOverId !== id) setDragOverId(id);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    if (!draggedId || draggedId === targetId) {
-      setDraggedId(null); setDragOverId(null); return;
+    if (activePage) {
+      activePageIdRef.current = activePage.id;
     }
-    
-    setPages(prev => prev.map(page => {
-      if (page.id !== activePage.id) return page;
-      const blocks = [...page.blocks];
-      const draggedIdx = blocks.findIndex(b => b.id === draggedId);
-      const targetIdx = blocks.findIndex(b => b.id === targetId);
-      if (draggedIdx === -1 || targetIdx === -1) return page;
-      
-      const [draggedBlock] = blocks.splice(draggedIdx, 1);
-      blocks.splice(targetIdx, 0, draggedBlock);
-      return { ...page, blocks };
-    }));
-    
-    setDraggedId(null); setDragOverId(null); setDraggableBlockId(null);
-  };
+  }, [activePage]);
 
-  const handleDragEnd = () => {
-    setDraggedId(null); setDragOverId(null); setDraggableBlockId(null);
-  };
+  useEffect(() => {
+    slashMenuVisibleRef.current = slashMenu.visible;
+  }, [slashMenu.visible]);
 
-  // --- HANDLERS: MENUS & FORMATAÇÃO ---
-  const handleSelectionCheck = (blockId: string, domId: string, field: 'content' | 'content2' = 'content') => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
-      setFormatMenu((prev) => ({ ...prev, visible: false }));
-      setShowColorPalette(false); return;
-    }
-    if (editorContainerRef.current) {
-      const rect = selection.getRangeAt(0).getBoundingClientRect();
-      const contRect = editorContainerRef.current.getBoundingClientRect();
-      setFormatMenu({
-        visible: true, blockId, domId, field,
-        x: Math.max(10, Math.min(rect.left - contRect.left + (rect.width / 2) - 112, contRect.width - 240)),
-        y: rect.bottom - contRect.top + 8,
-        activeFormats: {
-          bold: document.queryCommandState('bold'),
-          italic: document.queryCommandState('italic'),
-          underline: document.queryCommandState('underline')
+  // 5. Inicialização do Motor Tiptap
+  const extensions = useMemo(() => createEnchiridionExtensions(), []);
+
+  const editor = useEditor({
+    extensions,
+    content: activePage?.content || { type: 'doc', content: [{ type: 'paragraph' }] },
+    editorProps: {
+      attributes: {
+        class: 'tiptap focus:outline-none min-h-[55vh] text-[#EDEDED] text-sm md:text-[1.1rem] leading-relaxed',
+      },
+      handleKeyDown: (view, event) => {
+        if (event.key === '/' && !slashMenuVisibleRef.current) {
+          setTimeout(() => {
+            const { from } = view.state.selection;
+            const coords = view.coordsAtPos(from);
+            setSlashMenu({
+              visible: true,
+              x: coords.left,
+              y: coords.bottom + 6,
+              query: '',
+            });
+          }, 10);
         }
-      });
+        return false;
+      },
+    },
+    onUpdate: ({ editor }) => {
+      const currentId = activePageIdRef.current;
+      const json = editor.getJSON();
+      setSaveStatus('saving');
+      setPages((prev) =>
+        prev.map((p) => (p.id === currentId ? { ...p, content: json, updatedAt: Date.now() } : p))
+      );
+    },
+  });
+
+  // 6. Sincronização de Conteúdo ao Alternar de Página
+  useEffect(() => {
+    if (!editor || !activePage) return;
+    const currentJSON = JSON.stringify(editor.getJSON());
+    const targetJSON = JSON.stringify(activePage.content);
+    if (currentJSON !== targetJSON) {
+      editor.commands.setContent(
+        activePage.content || { type: 'doc', content: [{ type: 'paragraph' }] },
+        { emitUpdate: false }
+      );
     }
-  };
+    setGutter((prev) => ({ ...prev, visible: false }));
+    setBlockActionMenu((prev) => ({ ...prev, visible: false }));
+    setSlashMenu((prev) => ({ ...prev, visible: false }));
+  }, [activePage?.id, editor]);
 
-  const handleOpenInsertMenu = (e: React.MouseEvent, blockId: string) => {
-    e.stopPropagation();
-    if (editorContainerRef.current) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const contRect = editorContainerRef.current.getBoundingClientRect();
-      setInsertMenu({
-        visible: true, blockId, view: 'main',
-        x: Math.max(10, Math.min(rect.left - contRect.left, contRect.width - 200)),
-        y: rect.bottom - contRect.top + 8
-      });
-      setFormatMenu(prev => ({ ...prev, visible: false }));
-    }
-  };
+  // 7. Salvamento Automático com Debounce (400ms)
+  useEffect(() => {
+    setSaveStatus('saving');
+    const timer = setTimeout(() => {
+      const ok = savePagesToStorage(pages);
+      setSaveStatus(ok ? 'saved' : 'error');
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [pages]);
 
-  const applyInlineFormat = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    setFormatMenu((prev) => ({
-      ...prev, activeFormats: { bold: document.queryCommandState('bold'), italic: document.queryCommandState('italic'), underline: document.queryCommandState('underline') }
-    }));
-    if (formatMenu.blockId && formatMenu.domId) {
-      const el = document.getElementById(formatMenu.domId);
-      if (el) updateBlock(formatMenu.blockId, { [formatMenu.field]: el.innerHTML });
-    }
-  };
+  // ============================================================================
+  // GERENCIAMENTO DE PÁGINAS E SUBPÁGINAS
+  // ============================================================================
+  const updatePage = useCallback((id: string, updates: Partial<NotePage>) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p)));
+  }, []);
 
-  // --- HANDLERS: PÁGINAS E BLOCOS ---
-  const updatePage = (id: string, updates: Partial<NotePage>) => setPages(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-  const updateBlock = (blockId: string, updates: Partial<Block>) => setPages(prev => prev.map(p => p.id !== activePage.id ? p : { ...p, blocks: p.blocks.map(b => b.id === blockId ? { ...b, ...updates } : b) }));
-  
-  const createPage = (parentId: string | null = null, title = 'Nova Página') => {
-    const newId = 'page-' + Date.now();
-    const firstBlockId = 'b-' + Date.now();
-    setPages(prev => [...prev, { id: newId, title, description: '', icon: parentId ? '📄' : '📝', parentId, blocks: [{ id: firstBlockId, type: 'text', content: '' }] }]);
-    if (parentId) setExpandedPages(prev => ({ ...prev, [parentId]: true }));
-    setActivePageId(newId);
-    return newId;
-  };
-
-  const deletePageRecursively = (pageId: string) => {
-    if (pages.length <= 1) return;
-    const findChildrenIds = (id: string): string[] => [id, ...pages.filter(p => p.parentId === id).flatMap(c => findChildrenIds(c.id))];
-    const idsToDelete = new Set(findChildrenIds(pageId));
-    
-    // Remove as páginas e também limpa blocos 'page' que apontavam para elas
-    const remaining = pages
-      .filter(p => !idsToDelete.has(p.id))
-      .map(p => ({
-        ...p,
-        blocks: p.blocks.filter(b => !(b.type === 'page' && b.targetPageId && idsToDelete.has(b.targetPageId)))
-      }));
-
-    setPages(remaining);
-    if (idsToDelete.has(activePageId)) setActivePageId(remaining[0]?.id || '');
-  };
-
-  const addBlockAfter = (currentBlockId: string, type: Block['type'] = 'text') => {
-    const newBlockId = 'b-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
-    const newBlock: Block = { id: newBlockId, type, content: '', content2: '', checked: false };
-    
-    setPages(prev => prev.map(p => {
-      if (p.id !== activePage.id) return p;
-      const index = p.blocks.findIndex(b => b.id === currentBlockId);
-      const updated = [...p.blocks];
-      updated.splice(index + 1, 0, newBlock);
-      return { ...p, blocks: updated };
-    }));
-    
-    setActiveBlockId(newBlockId);
-    focusBlock(`block-${newBlockId}`, false);
-  };
-
-  const handleInsertBlock = (type: Block['type']) => {
-    if (!insertMenu.blockId) return;
-    const targetBlockId = insertMenu.blockId;
-    const block = activePage.blocks.find(b => b.id === targetBlockId);
-    const isEmpty = block && (!block.content || block.content === '<br>' || block.content.trim() === '');
-
-    if (type === 'page') {
-      const newPageId = 'page-' + Date.now();
+  const createPage = useCallback(
+    (parentId: string | null = null, title = 'Nova página', openImmediately = true) => {
+      const newId = `page-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const newPage: NotePage = {
-        id: newPageId, title: 'Subpágina', description: '', icon: '📄',
-        parentId: activePage.id, blocks: [{ id: 'b-' + Date.now(), type: 'text', content: '' }]
+        id: newId,
+        title,
+        icon: parentId ? '📄' : '📝',
+        parentId,
+        isFavorite: false,
+        isDeleted: false,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        comments: [],
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
       };
 
-      setPages(prev => {
-        const updatedPages = prev.map(p => {
-          if (p.id !== activePage.id) return p;
-          if (isEmpty) {
-            return { ...p, blocks: p.blocks.map(b => b.id === targetBlockId ? { ...b, type: 'page' as const, targetPageId: newPageId, content: 'Subpágina' } : b) };
-          }
-          const idx = p.blocks.findIndex(b => b.id === targetBlockId);
-          const updatedBlocks = [...p.blocks];
-          updatedBlocks.splice(idx + 1, 0, { id: 'b-' + Date.now(), type: 'page', content: 'Subpágina', targetPageId: newPageId });
-          return { ...p, blocks: updatedBlocks };
-        });
-        return [...updatedPages, newPage];
-      });
-
-      setExpandedPages(prev => ({ ...prev, [activePage.id]: true }));
-      setActivePageId(newPageId);
-    } else {
-      if (isEmpty) {
-        updateBlock(targetBlockId, { type, content: '', content2: '' });
-        focusBlock(`block-${targetBlockId}`, false);
-      } else {
-        addBlockAfter(targetBlockId, type);
+      setPages((prev) => [...prev, newPage]);
+      if (parentId) {
+        setExpandedPages((prev) => ({ ...prev, [parentId]: true }));
       }
-    }
-    setInsertMenu({ ...insertMenu, visible: false });
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, block: Block, index: number, isSecondCol = false) => {
-    // No bloco de 2 colunas, Enter simples pula linha dentro da coluna; Shift+Enter cria bloco abaixo
-    if (block.type === '2-col') {
-      if (e.key === 'Enter' && e.shiftKey) {
-        e.preventDefault();
-        addBlockAfter(block.id, 'text');
-        return;
+      if (openImmediately) {
+        setActivePageId(newId);
       }
-    } else {
-      // Nos demais blocos, Enter simples cria uma nova linha (bloco) abaixo e foca nela
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        addBlockAfter(block.id, ['todo', 'bullet', 'number'].includes(block.type) ? block.type : 'text');
-        return;
-      }
-    }
-
-    // Navegação com Seta para Cima e para Baixo entre blocos
-    if (e.key === 'ArrowUp' && index > 0 && block.type !== '2-col') {
-      const prevBlock = activePage.blocks[index - 1];
-      if (prevBlock && prevBlock.type !== 'page') {
-        e.preventDefault();
-        setActiveBlockId(prevBlock.id);
-        focusBlock(`block-${prevBlock.id}`, true);
-        return;
-      }
-    }
-    if (e.key === 'ArrowDown' && index < activePage.blocks.length - 1 && block.type !== '2-col') {
-      const nextBlock = activePage.blocks[index + 1];
-      if (nextBlock && nextBlock.type !== 'page') {
-        e.preventDefault();
-        setActiveBlockId(nextBlock.id);
-        focusBlock(`block-${nextBlock.id}`, true);
-        return;
-      }
-    }
-
-    // Backspace em linha vazia
-    const currentText = e.currentTarget.textContent || '';
-    if (e.key === 'Backspace' && currentText.trim() === '') {
-      if (block.type === '2-col') {
-        const col1Empty = !block.content || block.content === '<br>' || block.content.trim() === '';
-        const col2Empty = !block.content2 || block.content2 === '<br>' || block.content2.trim() === '';
-        if (!col1Empty || !col2Empty) return; // Só apaga as 2 colunas se ambas estiverem vazias
-      } else if (block.type !== 'text') {
-        e.preventDefault();
-        updateBlock(block.id, { type: 'text' });
-        return;
-      }
-
-      if (activePage.blocks.length > 1 && !isSecondCol) {
-        e.preventDefault();
-        const prevBlock = activePage.blocks[index - 1];
-        setPages(prev => prev.map(p => p.id === activePage.id ? { ...p, blocks: p.blocks.filter(b => b.id !== block.id) } : p));
-        if (prevBlock) {
-          setActiveBlockId(prevBlock.id);
-          focusBlock(`block-${prevBlock.id}`, true);
-        }
-      }
-    }
-  };
-
-  // --- RENDER HELPERS ---
-  const renderPageTree = (parentId: string | null = null, depth = 0) => {
-    const currentPages = pages.filter(p => p.parentId === parentId);
-    if (currentPages.length === 0) return null;
-    return (
-      <div className="space-y-0.5">
-        {currentPages.map((page) => (
-          <div key={page.id} className="flex flex-col">
-            <div style={{ paddingLeft: `${depth * 12 + 6}px` }} onClick={() => setActivePageId(page.id)}
-              className={`group flex items-center justify-between py-1.5 pr-2 rounded-lg text-sm cursor-pointer transition-all ${page.id === activePage.id ? 'bg-blue-600/15 text-blue-400 font-medium' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'}`}>
-              <div className="flex items-center gap-1.5 truncate">
-                {pages.some(p => p.parentId === page.id) ? (
-                  <button onClick={(e) => { e.stopPropagation(); setExpandedPages(prev => ({ ...prev, [page.id]: !prev[page.id] })); }} className="p-0.5 hover:text-white text-slate-500 rounded">
-                    {expandedPages[page.id] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                  </button>
-                ) : <span className="w-4" />}
-                <span className="text-base select-none">{page.icon}</span><span className="truncate text-xs">{page.title || 'Sem título'}</span>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={(e) => { e.stopPropagation(); createPage(page.id, 'Subpágina'); }} className="p-1 hover:text-blue-400 text-slate-500 hover:bg-slate-800 rounded" title="Nova subpágina"><Plus className="w-3.5 h-3.5" /></button>
-                {pages.length > 1 && <button onClick={(e) => { e.stopPropagation(); deletePageRecursively(page.id); }} className="p-1 hover:text-red-400 text-slate-500 hover:bg-slate-800 rounded" title="Excluir página"><Trash2 className="w-3.5 h-3.5" /></button>}
-              </div>
-            </div>
-            {expandedPages[page.id] && renderPageTree(page.id, depth + 1)}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const renderBlockControls = (blockId: string, mtClass = "mt-1.5") => (
-    <div className={`flex items-center gap-0.5 ${mtClass} w-12 shrink-0 transition-opacity ${activeBlockId === blockId || draggableBlockId === blockId ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'}`}>
-      <button onClick={(e) => handleOpenInsertMenu(e, blockId)} className="btn-plus p-0.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors" title="Inserir bloco"><Plus className="w-4 h-4" /></button>
-      <div 
-        onMouseEnter={() => setDraggableBlockId(blockId)}
-        onMouseLeave={() => setDraggableBlockId(null)}
-        className="cursor-grab active:cursor-grabbing p-0.5 text-slate-600 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors" title="Arraste para mover"
-      >
-        <GripVertical className="w-3.5 h-3.5" />
-      </div>
-    </div>
+      return newId;
+    },
+    []
   );
 
-  const renderBlockPrefix = (block: Block) => {
-    if (block.type === 'todo') return (
-      <button onClick={() => updateBlock(block.id, { checked: !block.checked })} className="mt-0.5 text-slate-500 hover:text-blue-400 transition-colors shrink-0">
-        {block.checked ? <CheckSquare className="w-4 h-4 text-emerald-400" /> : <Square className="w-4 h-4" />}
-      </button>
+  const createSubpageInsideEditor = useCallback(() => {
+    if (!editor || !activePage) return;
+    const subId = createPage(activePage.id, 'Subpágina', false);
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        { type: 'pageLink', attrs: { pageId: subId, title: 'Subpágina' } },
+        { type: 'paragraph' },
+      ])
+      .run();
+  }, [editor, activePage, createPage]);
+
+  const duplicatePage = useCallback(
+    (pageId: string) => {
+      const orig = pages.find((p) => p.id === pageId);
+      if (!orig) return;
+      const newId = `page-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const copy: NotePage = {
+        ...JSON.parse(JSON.stringify(orig)),
+        id: newId,
+        title: `${orig.title} (Cópia)`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setPages((prev) => [...prev, copy]);
+    },
+    [pages]
+  );
+
+  const softDeletePage = useCallback(
+    (pageId: string) => {
+      const activeCount = pages.filter((p) => !p.isDeleted).length;
+      if (activeCount <= 1) return;
+
+      const findDescendants = (id: string): string[] => [
+        id,
+        ...pages.filter((p) => p.parentId === id).flatMap((child) => findDescendants(child.id)),
+      ];
+      const toTrash = new Set(findDescendants(pageId));
+
+      setPages((prev) => prev.map((p) => (toTrash.has(p.id) ? { ...p, isDeleted: true } : p)));
+      if (toTrash.has(activePageId)) {
+        const remaining = pages.filter((p) => !p.isDeleted && !toTrash.has(p.id));
+        if (remaining[0]) setActivePageId(remaining[0].id);
+      }
+    },
+    [pages, activePageId]
+  );
+
+  const restorePage = useCallback(
+    (pageId: string) => {
+      updatePage(pageId, { isDeleted: false });
+    },
+    [updatePage]
+  );
+
+  const permanentDeletePage = useCallback((pageId: string) => {
+    setPages((prev) => prev.filter((p) => p.id !== pageId));
+  }, []);
+
+  // Ponte de contexto para os blocos PageLink dentro do Tiptap
+  const pageBridge: PageBridge = useMemo(
+    () => ({
+      getPageInfo: (id) => {
+        const found = pages.find((p) => p.id === id && !p.isDeleted);
+        return found ? { title: found.title, icon: found.icon } : null;
+      },
+      openPage: (id) => {
+        const exists = pages.find((p) => p.id === id && !p.isDeleted);
+        if (exists) setActivePageId(id);
+      },
+      renamePage: (id, newTitle) => updatePage(id, { title: newTitle }),
+      duplicatePage: (id) => duplicatePage(id),
+      deletePage: (id) => softDeletePage(id),
+    }),
+    [pages, updatePage, duplicatePage, softDeletePage]
+  );
+
+  // ============================================================================
+  // BUSCA E NAVEGAÇÃO (BREADCRUMBS)
+  // ============================================================================
+  const breadcrumbs = useMemo(() => {
+    const trail: NotePage[] = [];
+    let curr: NotePage | undefined = activePage;
+    const visited = new Set<string>();
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      trail.unshift(curr);
+      curr = pages.find((p) => p.id === curr?.parentId);
+    }
+    return trail;
+  }, [activePage, pages]);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return pages.filter(
+      (p) =>
+        !p.isDeleted &&
+        (p.title.toLowerCase().includes(q) ||
+          extractPlainTextFromJSON(p.content).toLowerCase().includes(q))
     );
-    if (block.type === 'bullet') return <div className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-2 shrink-0" />;
-    if (block.type === 'number') return <div className="text-sm font-medium text-slate-400 mt-0.5 shrink-0 select-none min-w-[18px] text-right">{block.listNumber}.</div>;
-    if (block.type === 'quote') return <div className="w-1 bg-amber-400 self-stretch rounded-full shrink-0" />;
-    return null;
+  }, [pages, searchQuery]);
+
+  // ============================================================================
+  // GUTTER LATERAL ("+" E "::") E MANIPULAÇÃO DE BLOCOS
+  // ============================================================================
+  const handleEditorMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!editorWrapperRef.current || !editor || blockActionMenu.visible) return;
+    const tiptapEl = editorWrapperRef.current.querySelector('.tiptap') as HTMLElement | null;
+    if (!tiptapEl) return;
+
+    // Oculta os controles se o mouse estiver sobre uma linha divisória (hr)
+    const targetEl = e.target as HTMLElement;
+    if (targetEl.tagName === 'HR') {
+      setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    const blockElements = Array.from(
+      tiptapEl.querySelectorAll(
+        'li, p:not(li p), h1, h2, h3, h4, pre, table, [data-type="page-link"], [data-type="math-block"], [data-type="bookmark-block"]'
+      )
+    ) as HTMLElement[];
+
+    for (let i = blockElements.length - 1; i >= 0; i--) {
+      const el = blockElements[i];
+      const rect = el.getBoundingClientRect();
+
+      // Ancora pela borda da coluna (se dentro de coluna) ou pela margem principal do editor
+      const colEl = el.closest('.notion-column') as HTMLElement | null;
+      const anchorLeft = colEl
+        ? colEl.getBoundingClientRect().left
+        : tiptapEl.getBoundingClientRect().left;
+
+      const isWithinY = e.clientY >= rect.top - 3 && e.clientY <= rect.bottom + 3;
+      const isWithinX = e.clientX >= anchorLeft - 68 && e.clientX <= rect.right + 24;
+
+      if (isWithinY && isWithinX) {
+        const wrapperRect = editorWrapperRef.current.getBoundingClientRect();
+        const targetForPos = (el.querySelector('p, h1, h2, h3, h4') as HTMLElement) || el;
+        let pos = -1;
+        try {
+          pos = editor.view.posAtDOM(targetForPos, 0);
+        } catch {}
+
+        setGutter({
+          visible: true,
+          top: rect.top - wrapperRect.top,
+          left: anchorLeft - wrapperRect.left - 56,
+          pos,
+        });
+        return;
+      }
+    }
+
+    setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   };
 
-  let listIndex = 1;
-  const blocksWithContext = activePage.blocks.map(b => (b.type === 'number' ? { ...b, listNumber: listIndex++ } : (listIndex = 1, { ...b, listNumber: 0 })));
-  
-  const breadcrumbs: NotePage[] = [];
-  let curr: NotePage | undefined = activePage;
-  while (curr) { breadcrumbs.unshift(curr); curr = pages.find(p => p.id === curr?.parentId); }
+  const manipulateBlockAtPos = (action: 'delete' | 'duplicate' | 'up' | 'down', targetPos: number) => {
+    if (!editor || targetPos < 0) return;
+    const { state, view } = editor;
+    const { doc } = state;
+
+    try {
+      const $pos = doc.resolve(Math.min(targetPos, doc.content.size));
+      let targetDepth = -1;
+
+      // 1. Prioriza itens de lista ou tarefa (li)
+      for (let d = $pos.depth; d >= 1; d--) {
+        const name = $pos.node(d).type.name;
+        if (name === 'taskItem' || name === 'listItem') {
+          targetDepth = d;
+          break;
+        }
+      }
+
+      // 2. Caso contrário, busca o bloco mais próximo
+      if (targetDepth === -1) {
+        for (let d = $pos.depth; d >= 1; d--) {
+          const name = $pos.node(d).type.name;
+          if (
+            [
+              'paragraph',
+              'heading',
+              'codeBlock',
+              'blockquote',
+              'horizontalRule',
+              'pageLink',
+              'mathBlock',
+              'bookmarkBlock',
+              'calloutBlock',
+              'toggleBlock',
+              'table',
+            ].includes(name)
+          ) {
+            targetDepth = d;
+            break;
+          }
+        }
+      }
+
+      if (targetDepth > 0) {
+        const node = $pos.node(targetDepth);
+        const start = $pos.before(targetDepth);
+        const end = $pos.after(targetDepth);
+        const parent = $pos.node(targetDepth - 1);
+        const index = $pos.index(targetDepth - 1);
+
+        if (action === 'delete') {
+          if (parent.childCount <= 1 && (parent.type.name === 'doc' || parent.type.name === 'column')) {
+            const pNode = state.schema.nodes.paragraph.create();
+            view.dispatch(state.tr.replaceWith(start, end, pNode));
+          } else {
+            editor.chain().focus().deleteRange({ from: start, to: end }).run();
+          }
+        } else if (action === 'duplicate') {
+          editor.chain().focus().insertContentAt(end, node.toJSON()).run();
+        } else if (action === 'up' && index > 0) {
+          const prevNode = parent.child(index - 1);
+          const prevStart = start - prevNode.nodeSize;
+          view.dispatch(state.tr.replaceWith(prevStart, end, [node, prevNode]));
+        } else if (action === 'down' && index < parent.childCount - 1) {
+          const nextNode = parent.child(index + 1);
+          const nextEnd = end + nextNode.nodeSize;
+          view.dispatch(state.tr.replaceWith(start, nextEnd, [nextNode, node]));
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao manipular bloco:', err);
+    }
+
+    setBlockActionMenu((prev) => ({ ...prev, visible: false }));
+  };
+
+  // ============================================================================
+  // EXPORTAÇÃO E IMPORTAÇÃO DE DOCUMENTOS
+  // ============================================================================
+  const handleExportDocument = (format: 'md' | 'html' | 'json') => {
+    if (!activePage || !editor) return;
+    let contentStr = '';
+    let mime = 'text/plain';
+    const ext = format;
+
+    if (format === 'md') {
+      contentStr = jsonToMarkdown(editor.getJSON(), activePage.title);
+      mime = 'text/markdown';
+    } else if (format === 'html') {
+      contentStr = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${activePage.title}</title></head><body style="background:#191919;color:#EDEDED;font-family:sans-serif;padding:2rem;"><h1>${activePage.icon} ${activePage.title}</h1>${editor.getHTML()}</body></html>`;
+      mime = 'text/html';
+    } else {
+      contentStr = JSON.stringify(activePage, null, 2);
+      mime = 'application/json';
+    }
+
+    const blob = new Blob([contentStr], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activePage.title || 'documento'}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
+  const handleImportDocument = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      if (file.name.endsWith('.md')) {
+        const parsed = markdownToTiptapJSON(text);
+        const id = createPage(null, parsed.title, true);
+        updatePage(id, { content: parsed.content });
+      } else if (file.name.endsWith('.json')) {
+        try {
+          const obj = JSON.parse(text);
+          if (obj.content && obj.title) {
+            const newId = `page-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            setPages((prev) => [...prev, { ...obj, id: newId, isDeleted: false }]);
+            setActivePageId(newId);
+          }
+        } catch {
+          alert('Arquivo JSON inválido.');
+        }
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const closeAllFloatingMenus = () => {
+    setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    setBlockActionMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+    setShowIconPicker(false);
+    setShowCoverPicker(false);
+    setShowExportMenu(false);
+  };
+
+  // ============================================================================
+  // RENDERIZAÇÃO
+  // ============================================================================
+  return (
+    <PageBridgeContext.Provider value={pageBridge}>
+      <div className="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-5rem)] text-[#EDEDED]">
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".md,.json"
+          className="hidden"
+          onChange={handleImportDocument}
+        />
+
+        {/* ===================================================================
+            SIDEBAR HIERÁRQUICA DE PÁGINAS
+           =================================================================== */}
+        {sidebarOpen && (
+          <aside className="w-full lg:w-64 bg-[#191919] border border-[#373737] rounded-2xl p-3.5 flex flex-col justify-between shrink-0 select-none">
+            <div>
+              {/* Topo da Sidebar */}
+              <div className="flex items-center justify-between pb-3 mb-3 border-b border-[#373737]">
+                <span className="text-xs font-bold tracking-wider text-[#EDEDED] uppercase">
+                  ENCHIRIDION
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => createPage(null, 'Nova página', true)}
+                    title="Nova Página Raiz"
+                    className="p-1 hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] rounded transition"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSidebarOpen(false)}
+                    title="Recolher barra lateral"
+                    className="p-1 hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] rounded transition lg:inline-flex hidden"
+                  >
+                    <PanelLeftClose className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Busca Global */}
+              <div className="relative mb-3">
+                <Search className="w-3.5 h-3.5 text-[#858585] absolute left-2.5 top-2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar em títulos e notas..."
+                  className="w-full bg-[#252525] border border-[#373737] rounded-lg pl-8 pr-2.5 py-1 text-xs text-[#EDEDED] placeholder-[#858585] focus:outline-none"
+                />
+              </div>
+
+              {/* Resultados da Busca ou Árvore de Páginas */}
+              {searchQuery.trim() !== '' ? (
+                <div className="space-y-1 mb-4 max-h-56 overflow-y-auto">
+                  <div className="text-[10px] font-semibold uppercase text-[#858585] px-2">
+                    Resultados ({searchResults.length})
+                  </div>
+                  {searchResults.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setActivePageId(p.id);
+                        setSearchQuery('');
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs hover:bg-[#252525] text-left truncate"
+                    >
+                      <span>{p.icon}</span>
+                      <span className="truncate">{p.title}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Favoritos */}
+                  {pages.some((p) => p.isFavorite && !p.isDeleted) && (
+                    <div className="mb-4">
+                      <div className="text-[10px] font-semibold uppercase text-[#858585] px-2 mb-1">
+                        Favoritos
+                      </div>
+                      {pages
+                        .filter((p) => p.isFavorite && !p.isDeleted)
+                        .map((fav) => (
+                          <button
+                            key={fav.id}
+                            type="button"
+                            onClick={() => setActivePageId(fav.id)}
+                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs mb-0.5 transition ${
+                              fav.id === activePage.id
+                                ? 'bg-[#252525] text-white font-semibold'
+                                : 'text-[#858585] hover:bg-[#252525] hover:text-[#EDEDED]'
+                            }`}
+                          >
+                            <span>{fav.icon}</span>
+                            <span className="truncate">{fav.title}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+
+                  {/* Lista Hierárquica de Páginas */}
+                  <div className="text-[10px] font-semibold uppercase text-[#858585] px-2 mb-1">
+                    Páginas
+                  </div>
+                  <div className="space-y-0.5 overflow-y-auto max-h-[52vh] pr-1">
+                    {pages
+                      .filter((p) => !p.parentId && !p.isDeleted)
+                      .map((page) => (
+                        <SidebarItem
+                          key={page.id}
+                          page={page}
+                          allPages={pages.filter((p) => !p.isDeleted)}
+                          activeId={activePage.id}
+                          expanded={expandedPages}
+                          onSelect={setActivePageId}
+                          onToggle={(id) =>
+                            setExpandedPages((prev) => ({ ...prev, [id]: !prev[id] }))
+                          }
+                          onCreateChild={(parentId) => {
+                            const subId = createPage(parentId, 'Subpágina', true);
+                            const parentPage = pages.find((p) => p.id === parentId);
+                            if (parentPage) {
+                              const nextContent: JSONContent = {
+                                type: 'doc',
+                                content: [
+                                  ...(parentPage.content.content || []),
+                                  { type: 'pageLink', attrs: { pageId: subId, title: 'Subpágina' } },
+                                ],
+                              };
+                              updatePage(parentId, { content: nextContent });
+                            }
+                          }}
+                          onDuplicate={duplicatePage}
+                          onDelete={softDeletePage}
+                        />
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Rodapé da Sidebar (Lixeira e Nova Página Raiz) */}
+            <div className="pt-3 border-t border-[#373737] space-y-1.5">
+              <button
+                type="button"
+                onClick={() => setShowTrash(!showTrash)}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-[#858585] hover:text-[#EDEDED] hover:bg-[#252525] transition"
+              >
+                <div className="flex items-center gap-2">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Lixeira</span>
+                </div>
+                <span className="text-[10px] bg-[#252525] px-1.5 py-0.5 rounded">
+                  {pages.filter((p) => p.isDeleted).length}
+                </span>
+              </button>
+
+              {showTrash && (
+                <div className="bg-[#252525] border border-[#373737] rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
+                  {pages.filter((p) => p.isDeleted).length === 0 ? (
+                    <div className="text-[11px] text-[#858585] text-center py-2">Lixeira vazia</div>
+                  ) : (
+                    pages
+                      .filter((p) => p.isDeleted)
+                      .map((del) => (
+                        <div key={del.id} className="flex items-center justify-between text-xs py-1 px-1">
+                          <span className="truncate">
+                            {del.icon} {del.title}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => restorePage(del.id)}
+                              title="Restaurar"
+                              className="p-1 hover:bg-[#333333] text-emerald-400 rounded"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => permanentDeletePage(del.id)}
+                              title="Excluir permanentemente"
+                              className="p-1 hover:bg-[#333333] text-rose-400 rounded"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => createPage(null, 'Nova página', true)}
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#373737] hover:border-[#858585] text-xs text-[#858585] hover:text-[#EDEDED] rounded-xl transition"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova Página Raiz
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {/* ===================================================================
+            ÁREA PRINCIPAL DO DOCUMENTO (#191919 NOTION DARK THEME)
+           =================================================================== */}
+        <main
+          onClick={closeAllFloatingMenus}
+          className="flex-1 bg-[#191919] border border-[#373737] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative"
+        >
+          {/* Barra Superior: Breadcrumbs, Status de Salvamento e Opções */}
+          <div className="flex items-center justify-between px-4 sm:px-6 h-12 border-b border-[#2A2A2A] text-xs select-none">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {!sidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-1.5 mr-1 hover:bg-[#252525] rounded text-[#858585] hover:text-[#EDEDED]"
+                  title="Mostrar barra lateral"
+                >
+                  <PanelLeftOpen className="w-4 h-4" />
+                </button>
+              )}
+              {breadcrumbs.map((crumb, idx) => (
+                <React.Fragment key={crumb.id}>
+                  {idx > 0 && <span className="text-[#555555]">/</span>}
+                  <button
+                    type="button"
+                    onClick={() => setActivePageId(crumb.id)}
+                    className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#252525] text-[#EDEDED] truncate max-w-[140px]"
+                  >
+                    <span>{crumb.icon}</span>
+                    <span className="truncate">{crumb.title || 'Sem título'}</span>
+                  </button>
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Indicador de Salvamento Automático */}
+              <span className="text-[11px] text-[#858585] flex items-center gap-1">
+                {saveStatus === 'saving' && 'Salvando...'}
+                {saveStatus === 'saved' && (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-500" /> Salvo
+                  </>
+                )}
+                {saveStatus === 'error' && <span className="text-rose-400">Erro ao salvar</span>}
+              </span>
+
+              {/* Favoritar Página */}
+              <button
+                type="button"
+                onClick={() => updatePage(activePage.id, { isFavorite: !activePage.isFavorite })}
+                className={`p-1.5 rounded hover:bg-[#252525] transition ${
+                  activePage.isFavorite ? 'text-amber-400' : 'text-[#858585] hover:text-[#EDEDED]'
+                }`}
+                title="Favoritar página"
+              >
+                <Star className="w-4 h-4" fill={activePage.isFavorite ? 'currentColor' : 'none'} />
+              </button>
+
+              {/* Painel de Comentários */}
+              <button
+                type="button"
+                onClick={() => setShowComments(!showComments)}
+                className="p-1.5 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] relative"
+                title="Comentários da página"
+              >
+                <MessageSquare className="w-4 h-4" />
+                {(activePage.comments?.length || 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center">
+                    {activePage.comments?.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Menu Opções (Exportar / Importar) */}
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu(!showExportMenu)}
+                  className="px-2 py-1 rounded bg-[#252525] hover:bg-[#333333] border border-[#373737] text-xs text-[#EDEDED] flex items-center gap-1"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Opções</span>
+                </button>
+
+                {showExportMenu && (
+                  <div className="absolute right-0 top-8 z-50 w-48 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1.5 space-y-0.5 text-xs">
+                    <div className="px-2 py-1 text-[10px] text-[#858585] uppercase font-semibold">
+                      Exportar Página
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleExportDocument('md')}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                    >
+                      Markdown (.md)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportDocument('html')}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                    >
+                      HTML (.html)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportDocument('json')}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                    >
+                      JSON (.json)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExportMenu(false);
+                        window.print();
+                      }}
+                      className="w-full text-left px-2 py-1.5 rounded hover:bg-[#333333]"
+                    >
+                      Imprimir / Salvar PDF
+                    </button>
+                    <div className="border-t border-[#373737] my-1" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExportMenu(false);
+                        importInputRef.current?.click();
+                      }}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#333333] text-emerald-400"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Importar (.md / .json)
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Capa do Documento (Opcional) */}
+          {activePage.cover && (
+            <div
+              style={{
+                backgroundImage: activePage.cover.startsWith('http')
+                  ? `url(${activePage.cover})`
+                  : activePage.cover,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+              className="w-full h-40 relative group border-b border-[#373737]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="absolute right-4 bottom-3 opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition-opacity">
+                <button
+                  type="button"
+                  onClick={() => setShowCoverPicker(!showCoverPicker)}
+                  className="px-2.5 py-1 bg-[#191919]/90 hover:bg-[#252525] text-xs rounded border border-[#373737]"
+                >
+                  Alterar capa
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updatePage(activePage.id, { cover: undefined })}
+                  className="px-2.5 py-1 bg-[#191919]/90 hover:bg-[#252525] text-xs text-rose-400 rounded border border-[#373737]"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Corpo Centralizado Estilo Notion */}
+          <div className="max-w-5xl w-full mx-auto px-8 sm:px-16 py-8 flex-1 flex flex-col">
+            {/* Cabeçalho da Página: Ícone, Botões Discretos e Título */}
+            <div className="group mb-6">
+              {/* Seletor de Ícone */}
+              <div className="relative inline-block mb-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setShowIconPicker(!showIconPicker)}
+                  className="text-5xl sm:text-6xl hover:bg-[#252525] p-1.5 rounded-xl transition select-none"
+                  title="Clique para alterar o ícone"
+                >
+                  {activePage.icon || '💰'}
+                </button>
+
+                {showIconPicker && (
+                  <div className="absolute left-0 top-20 z-50 bg-[#252525] border border-[#373737] rounded-xl p-2.5 shadow-2xl w-64 grid grid-cols-5 gap-1.5">
+                    {PAGE_ICONS.map((ic) => (
+                      <button
+                        key={ic}
+                        type="button"
+                        onClick={() => {
+                          updatePage(activePage.id, { icon: ic });
+                          setShowIconPicker(false);
+                        }}
+                        className="text-xl p-1.5 hover:bg-[#333333] rounded-lg transition"
+                      >
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Ações discretas estilo Notion ("Adicionar capa", "Adicionar comentário") */}
+              <div className="flex items-center gap-3 text-xs text-[#858585] mb-2 h-6 opacity-80 group-hover:opacity-100 transition-opacity select-none">
+                {!activePage.cover && (
+                  <button
+                    type="button"
+                    onClick={() => updatePage(activePage.id, { cover: PAGE_COVERS[0] })}
+                    className="flex items-center gap-1.5 hover:text-[#EDEDED] transition"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>Adicionar capa</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowComments(true)}
+                  className="flex items-center gap-1.5 hover:text-[#EDEDED] transition"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Adicionar comentário</span>
+                </button>
+              </div>
+
+              {showCoverPicker && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="mb-4 p-2.5 bg-[#252525] border border-[#373737] rounded-xl flex items-center gap-2 overflow-x-auto"
+                >
+                  {PAGE_COVERS.map((cov, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        updatePage(activePage.id, { cover: cov });
+                        setShowCoverPicker(false);
+                      }}
+                      style={{
+                        backgroundImage: cov.startsWith('http') ? `url(${cov})` : cov,
+                        backgroundSize: 'cover',
+                      }}
+                      className="w-16 h-10 rounded border border-[#454545] shrink-0"
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Título Editável Direto */}
+              <input
+                type="text"
+                value={activePage.title}
+                onChange={(e) => updatePage(activePage.id, { title: e.target.value })}
+                placeholder="Sem título"
+                className="w-full bg-transparent text-3xl sm:text-5xl font-extrabold text-[#EDEDED] tracking-tight placeholder-[#454545] focus:outline-none"
+              />
+            </div>
+
+            {/* Painel de Comentários (Se aberto) */}
+            {showComments && (
+              <div className="mb-6 bg-[#202020] border border-[#373737] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-[#858585] uppercase">
+                  <span>Comentários ({activePage.comments?.length || 0})</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowComments(false)}
+                    className="hover:text-[#EDEDED]"
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                {selectedQuoteForComment && (
+                  <div className="text-xs italic border-l-2 border-amber-500 pl-2 text-[#858585]">
+                    Trecho: "{selectedQuoteForComment}"
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCommentText}
+                    onChange={(e) => setNewCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newCommentText.trim()) {
+                        const nextComments = [
+                          ...(activePage.comments || []),
+                          {
+                            id: `c-${Date.now()}`,
+                            author: 'Você',
+                            text: newCommentText.trim(),
+                            selectedText: selectedQuoteForComment,
+                            resolved: false,
+                            createdAt: Date.now(),
+                          },
+                        ];
+                        updatePage(activePage.id, { comments: nextComments });
+                        setNewCommentText('');
+                        setSelectedQuoteForComment(undefined);
+                      }
+                    }}
+                    placeholder="Escreva um comentário..."
+                    className="flex-1 bg-[#191919] border border-[#373737] rounded-lg px-3 py-1.5 text-xs text-[#EDEDED] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newCommentText.trim()) return;
+                      const nextComments = [
+                        ...(activePage.comments || []),
+                        {
+                          id: `c-${Date.now()}`,
+                          author: 'Você',
+                          text: newCommentText.trim(),
+                          selectedText: selectedQuoteForComment,
+                          resolved: false,
+                          createdAt: Date.now(),
+                        },
+                      ];
+                      updatePage(activePage.id, { comments: nextComments });
+                      setNewCommentText('');
+                      setSelectedQuoteForComment(undefined);
+                    }}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium"
+                  >
+                    Enviar
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {(activePage.comments || []).map((c) => (
+                    <div
+                      key={c.id}
+                      className="p-2.5 bg-[#252525] rounded-lg border border-[#373737] flex items-start justify-between text-xs"
+                    >
+                      <div>
+                        {c.selectedText && (
+                          <div className="text-[11px] text-amber-300/90 border-l-2 border-amber-400 pl-2 mb-1">
+                            "{c.selectedText}"
+                          </div>
+                        )}
+                        <div className={c.resolved ? 'line-through text-[#858585]' : 'text-[#EDEDED]'}>
+                          {c.text}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (activePage.comments || []).map((item) =>
+                              item.id === c.id ? { ...item, resolved: !item.resolved } : item
+                            );
+                            updatePage(activePage.id, { comments: updated });
+                          }}
+                          className="p-1 hover:bg-[#333333] text-emerald-400 rounded"
+                          title="Marcar como resolvido"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = (activePage.comments || []).filter(
+                              (item) => item.id !== c.id
+                            );
+                            updatePage(activePage.id, { comments: updated });
+                          }}
+                          className="p-1 hover:bg-[#333333] text-rose-400 rounded"
+                          title="Excluir comentário"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Container do Editor Tiptap com Gutter Lateral ("+" e "::") */}
+            <div
+              ref={editorWrapperRef}
+              onMouseMove={handleEditorMouseMove}
+              onMouseLeave={() => {
+                if (!blockActionMenu.visible) {
+                  setGutter((prev) => ({ ...prev, visible: false }));
+                }
+              }}
+              className="relative flex-1"
+            >
+              {/* Alças "+" e "::" Visíveis no Hover da Linha (Afastadas 56px sem cobrir letras) */}
+              {gutter.visible && (
+                <div
+                  style={{ top: gutter.top, left: gutter.left }}
+                  className="absolute flex items-center gap-0.5 select-none z-20 transition-all duration-75"
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (editor && gutter.pos >= 0) {
+                        editor.chain().focus().setTextSelection(gutter.pos).run();
+                      }
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setSlashMenu({
+                        visible: true,
+                        x: rect.left,
+                        y: rect.bottom + 6,
+                        query: '',
+                      });
+                    }}
+                    className="p-1 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED]"
+                    title="Clique para inserir bloco"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setBlockActionMenu({
+                        visible: true,
+                        x: rect.left,
+                        y: rect.bottom + 6,
+                        targetPos: gutter.pos,
+                      });
+                    }}
+                    className="p-1 rounded hover:bg-[#252525] text-[#858585] hover:text-[#EDEDED] cursor-grab"
+                    title="Opções e movimentação do bloco"
+                  >
+                    <GripVertical className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Menu Contextual do Bloco (ao clicar em "::") */}
+              {blockActionMenu.visible && (
+                <div
+                  style={{ left: blockActionMenu.x, top: blockActionMenu.y }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="fixed z-50 w-48 bg-[#252525] border border-[#373737] rounded-xl shadow-2xl p-1 text-xs text-[#EDEDED] space-y-0.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => manipulateBlockAtPos('duplicate', blockActionMenu.targetPos)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-[#858585]" /> Duplicar bloco
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => manipulateBlockAtPos('up', blockActionMenu.targetPos)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5 text-[#858585]" /> Mover para cima
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => manipulateBlockAtPos('down', blockActionMenu.targetPos)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#333333] text-left"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5 text-[#858585]" /> Mover para baixo
+                  </button>
+                  <div className="border-t border-[#373737] my-1" />
+                  <button
+                    type="button"
+                    onClick={() => manipulateBlockAtPos('delete', blockActionMenu.targetPos)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[#472222] text-[#D44C47] text-left"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir bloco
+                  </button>
+                </div>
+              )}
+
+              {/* Editor de Documento Tiptap */}
+              <EditorContent editor={editor} />
+            </div>
+          </div>
+
+          {/* Barra Flutuante de Seleção de Texto */}
+          <BubbleToolbar
+            editor={editor}
+            onAddComment={(quote) => {
+              setSelectedQuoteForComment(quote);
+              setShowComments(true);
+            }}
+            onCreateSubpage={createSubpageInsideEditor}
+          />
+
+          {/* Menu Slash "/" */}
+          <SlashCommandMenu
+            editor={editor}
+            visible={slashMenu.visible}
+            x={slashMenu.x}
+            y={slashMenu.y}
+            initialQuery={slashMenu.query}
+            onClose={() => setSlashMenu((prev) => ({ ...prev, visible: false }))}
+            onCreateSubpage={createSubpageInsideEditor}
+          />
+        </main>
+      </div>
+    </PageBridgeContext.Provider>
+  );
+}
+
+// ============================================================================
+// COMPONENTE RECURSIVO DA SIDEBAR (SidebarItem)
+// ============================================================================
+function SidebarItem({
+  page,
+  allPages,
+  activeId,
+  expanded,
+  onSelect,
+  onToggle,
+  onCreateChild,
+  onDuplicate,
+  onDelete,
+}: SidebarItemProps) {
+  const children = allPages.filter((p) => p.parentId === page.id);
+  const isExpanded = Boolean(expanded[page.id]);
+  const isActive = activeId === page.id;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 min-h-[650px] text-slate-100 select-none">
-      {/* MENU LATERAL */}
-      <div className="w-full lg:w-72 bg-[#0E1318]/90 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between shrink-0">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-            <input type="text" value={workspaceTitle} onChange={(e) => setWorkspaceTitle(e.target.value)} className="bg-transparent text-xs font-semibold tracking-wider text-slate-400 uppercase focus:text-white focus:outline-none w-full" />
-            <button onClick={() => createPage(null)} className="text-slate-400 hover:text-white hover:bg-slate-800 p-1 rounded-md ml-2" title="Nova página raiz"><FolderPlus className="w-4 h-4" /></button>
-          </div>
-          <div className="overflow-y-auto max-h-[500px] scrollbar-thin scrollbar-thumb-slate-800">{renderPageTree()}</div>
+    <div>
+      <div
+        onClick={() => onSelect(page.id)}
+        className={`group flex items-center justify-between px-2 py-1.5 rounded-lg text-xs md:text-sm font-medium cursor-pointer transition ${
+          isActive
+            ? 'bg-[#252525] text-white font-semibold'
+            : 'text-[#858585] hover:text-[#EDEDED] hover:bg-[#252525]/60'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 truncate">
+          {children.length > 0 ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle(page.id);
+              }}
+              className="p-0.5 hover:bg-[#333333] rounded text-[#858585] hover:text-[#EDEDED]"
+            >
+              {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          ) : (
+            <span className="w-4" />
+          )}
+          <span>{page.icon}</span>
+          <span className="truncate">{page.title || 'Sem título'}</span>
         </div>
-        <button onClick={() => createPage(null)} className="w-full mt-4 flex items-center justify-center gap-2 py-2 border border-dashed border-slate-800 hover:border-slate-700 text-xs text-slate-400 hover:text-white rounded-xl"><Plus className="w-3.5 h-3.5" /> Nova Página Raiz</button>
-      </div>
 
-      {/* EDITOR PRINCIPAL */}
-      <div ref={editorContainerRef} className="relative flex-1 bg-[#0E1318]/90 border border-slate-800/80 rounded-2xl p-6 sm:p-10 flex flex-col select-text overflow-hidden">
-        
-        {/* MODAL INSERIR BLOCO (+) */}
-        {insertMenu.visible && (
-          <div style={{ top: `${insertMenu.y}px`, left: `${insertMenu.x}px` }} className="insert-menu-container absolute z-50 w-56 bg-[#191919] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100">
-            {insertMenu.view === 'main' && (
-              <div className="space-y-0.5">
-                <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Inserir Bloco</div>
-                <MenuItem icon={FolderPlus} color="text-blue-400" label="Subpágina" onClick={() => handleInsertBlock('page')} />
-                <MenuItem icon={Type} color="text-indigo-400" label="Títulos" rightIcon={ChevronRight} onClick={() => setInsertMenu({ ...insertMenu, view: 'titles' })} />
-                <MenuItem icon={List} color="text-emerald-400" label="Listas" rightIcon={ChevronRight} onClick={() => setInsertMenu({ ...insertMenu, view: 'lists' })} />
-                <MenuItem icon={Quote} color="text-amber-400" label="Citação" onClick={() => handleInsertBlock('quote')} />
-                <MenuItem icon={Columns} color="text-slate-400" label="2 Colunas" onClick={() => handleInsertBlock('2-col')} />
-              </div>
-            )}
-            {insertMenu.view === 'titles' && (
-              <div className="space-y-0.5">
-                <button onClick={() => setInsertMenu({ ...insertMenu, view: 'main' })} className="w-full flex items-center gap-1.5 px-1.5 py-1 mb-1 rounded hover:bg-slate-800 text-slate-400"><ChevronLeft className="w-3.5 h-3.5" /> Voltar</button>
-                <MenuItem icon={Heading1} color="text-indigo-400" label="Título 1" onClick={() => handleInsertBlock('h1')} />
-                <MenuItem icon={Heading2} color="text-blue-400" label="Título 2" onClick={() => handleInsertBlock('h2')} />
-                <MenuItem icon={Heading3} color="text-slate-400" label="Título 3" onClick={() => handleInsertBlock('h3')} />
-              </div>
-            )}
-            {insertMenu.view === 'lists' && (
-              <div className="space-y-0.5">
-                <button onClick={() => setInsertMenu({ ...insertMenu, view: 'main' })} className="w-full flex items-center gap-1.5 px-1.5 py-1 mb-1 rounded hover:bg-slate-800 text-slate-400"><ChevronLeft className="w-3.5 h-3.5" /> Voltar</button>
-                <MenuItem icon={CheckSquare} color="text-emerald-400" label="Lista de tarefas" onClick={() => handleInsertBlock('todo')} />
-                <MenuItem icon={List} color="text-slate-400" label="Lista c/ marcadores" onClick={() => handleInsertBlock('bullet')} />
-                <MenuItem icon={ListOrdered} color="text-slate-400" label="Lista numerada" onClick={() => handleInsertBlock('number')} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* MODAL FORMATAÇÃO DE TEXTO */}
-        {formatMenu.visible && (
-          <div style={{ top: `${formatMenu.y}px`, left: `${formatMenu.x}px` }} className="format-menu-container absolute z-50 w-auto min-w-[140px] bg-[#1a1a1a] border border-slate-700/80 rounded-xl shadow-2xl p-2 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100">
-            <div className="flex items-center justify-between gap-1 px-1">
-              <FormatBtn icon={Bold} active={formatMenu.activeFormats.bold} onClick={() => applyInlineFormat('bold')} />
-              <FormatBtn icon={Italic} active={formatMenu.activeFormats.italic} onClick={() => applyInlineFormat('italic')} />
-              <FormatBtn icon={UnderlineIcon} active={formatMenu.activeFormats.underline} onClick={() => applyInlineFormat('underline')} />
-              <div className="w-px h-4 bg-slate-700 mx-1" />
-              <FormatBtn icon={Palette} color="text-amber-400" onClick={() => setShowColorPalette(!showColorPalette)} />
-            </div>
-            {showColorPalette && (
-              <div className="space-y-2 max-h-48 overflow-y-auto p-1 mt-2 border-t border-slate-700/60 pt-2">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Cor do Texto</span>
-                  <div className="grid grid-cols-7 gap-1 mt-1">
-                    {TEXT_COLORS.map((c) => <button key={c.name} onMouseDown={(e) => { e.preventDefault(); applyInlineFormat('foreColor', c.hex); }} className="text-center py-1 rounded text-[11px] border border-slate-700 hover:border-slate-500" style={{ color: c.hex }}>A</button>)}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Cor de Fundo</span>
-                  <div className="grid grid-cols-7 gap-1 mt-1">
-                    {BG_COLORS.map((bg) => <button key={bg.name} onMouseDown={(e) => { e.preventDefault(); applyInlineFormat('hiliteColor', bg.hex); }} className="h-5 rounded border border-slate-700 hover:border-slate-500" style={{ backgroundColor: bg.hex !== 'transparent' ? bg.hex : undefined }} title={bg.name} />)}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="space-y-6">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 pb-2 border-b border-slate-800/40">
-            {breadcrumbs.map((crumb, idx) => (
-              <React.Fragment key={crumb.id}>
-                {idx > 0 && <span className="text-slate-600">/</span>}
-                <button onClick={() => setActivePageId(crumb.id)} className={`hover:text-slate-300 transition-colors ${crumb.id === activePage.id ? 'text-slate-300 font-semibold' : ''}`}>{crumb.icon} {crumb.title}</button>
-              </React.Fragment>
-            ))}
-          </div>
-
-          <div className="space-y-3 pb-2">
-            <input type="text" value={activePage.icon} onChange={(e) => updatePage(activePage.id, { icon: e.target.value })} className="text-3xl bg-transparent w-12 border-b border-transparent hover:border-slate-800 focus:outline-none" />
-            <input type="text" value={activePage.title} onChange={(e) => updatePage(activePage.id, { title: e.target.value })} placeholder="Sem título" className="w-full bg-transparent text-3xl font-bold tracking-tight text-white focus:outline-none pb-1" />
-            <input type="text" value={activePage.description} onChange={(e) => updatePage(activePage.id, { description: e.target.value })} placeholder="Adicione uma breve descrição..." className="w-full bg-transparent text-sm text-slate-500 focus:text-slate-300 focus:outline-none" />
-          </div>
-
-          {/* Renderização de Blocos com Drag & Drop */}
-          <div className="space-y-0.5 min-h-[300px] pb-20">
-            {blocksWithContext.map((block, index) => {
-              
-              // Bloco: Subpágina sincronizado com a página real
-              if (block.type === 'page') {
-                const targetPage = pages.find(p => p.id === block.targetPageId);
-                return (
-                  <div 
-                    key={block.id} draggable={draggableBlockId === block.id}
-                    onDragStart={(e) => handleDragStart(e, block.id)} onDragOver={(e) => handleDragOver(e, block.id)} onDrop={(e) => handleDrop(e, block.id)} onDragEnd={handleDragEnd}
-                    className={`group relative flex items-center gap-1 my-2 rounded-lg transition-all min-w-0 ${dragOverId === block.id ? 'border-t-2 border-blue-500 pt-2' : ''} ${draggedId === block.id ? 'opacity-40' : ''}`}
-                  >
-                    {renderBlockControls(block.id, "mt-0")}
-                    <div onClick={() => block.targetPageId && setActivePageId(block.targetPageId)} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer text-slate-300 border border-slate-800/60 flex-1 min-w-0">
-                      <span className="text-base select-none">{targetPage?.icon || '📄'}</span>
-                      <span className="text-sm font-medium underline underline-offset-4 truncate">{targetPage?.title || block.content || 'Página sem título'}</span>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Bloco: 2 Colunas
-              if (block.type === '2-col') return (
-                <div 
-                  key={block.id} draggable={draggableBlockId === block.id}
-                  onDragStart={(e) => handleDragStart(e, block.id)} onDragOver={(e) => handleDragOver(e, block.id)} onDrop={(e) => handleDrop(e, block.id)} onDragEnd={handleDragEnd}
-                  className={`group relative flex items-start gap-1 py-1 rounded w-full transition-all min-w-0 ${dragOverId === block.id ? 'border-t-2 border-blue-500 pt-2' : ''} ${draggedId === block.id ? 'opacity-40' : ''}`}
-                >
-                  {renderBlockControls(block.id, "mt-1")}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full flex-1 min-w-0 border-l-2 border-slate-800/40 pl-3">
-                    <div className="min-w-0 overflow-hidden">
-                      <BlockEditor 
-                        domId={`block-${block.id}`} htmlContent={block.content} blockType="text"
-                        showPlaceholder={true} placeholderText="Coluna 1..."
-                        onChange={(val: string) => updateBlock(block.id, { content: val })}
-                        onSelectionCheck={() => handleSelectionCheck(block.id, `block-${block.id}`, 'content')}
-                        onKeyDown={(e: any) => handleKeyDown(e, block, index, false)}
-                        onFocus={() => setActiveBlockId(block.id)}
-                      />
-                    </div>
-                    <div className="min-w-0 overflow-hidden">
-                      <BlockEditor 
-                        domId={`block-${block.id}-col2`} htmlContent={block.content2 || ''} blockType="text"
-                        showPlaceholder={true} placeholderText="Coluna 2..."
-                        onChange={(val: string) => updateBlock(block.id, { content2: val })}
-                        onSelectionCheck={() => handleSelectionCheck(block.id, `block-${block.id}-col2`, 'content2')}
-                        onKeyDown={(e: any) => handleKeyDown(e, block, index, true)}
-                        onFocus={() => setActiveBlockId(block.id)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-
-              // Blocos Padrão
-              return (
-                <div 
-                  key={block.id} draggable={draggableBlockId === block.id}
-                  onDragStart={(e) => handleDragStart(e, block.id)} onDragOver={(e) => handleDragOver(e, block.id)} onDrop={(e) => handleDrop(e, block.id)} onDragEnd={handleDragEnd}
-                  className={`group relative flex items-start gap-1 py-0.5 rounded transition-all min-w-0 ${dragOverId === block.id ? 'border-t-2 border-blue-500 pt-2' : ''} ${draggedId === block.id ? 'opacity-40' : ''}`}
-                >
-                  {renderBlockControls(block.id)}
-                  <div className="flex items-start gap-2 flex-1 w-full mt-1 min-w-0">
-                    {renderBlockPrefix(block as Block)}
-                    <BlockEditor 
-                      domId={`block-${block.id}`} htmlContent={block.content} blockType={block.type} checked={block.checked}
-                      showPlaceholder={(index === 0 && activePage.blocks.length === 1) || activeBlockId === block.id || block.type !== 'text'}
-                      onChange={(val: string) => updateBlock(block.id, { content: val })}
-                      onSelectionCheck={() => handleSelectionCheck(block.id, `block-${block.id}`, 'content')}
-                      onKeyDown={(e: any) => handleKeyDown(e, block, index)}
-                      onFocus={() => setActiveBlockId(block.id)}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateChild(page.id);
+            }}
+            className="p-1 hover:bg-[#333333] text-[#858585] hover:text-[#EDEDED] rounded"
+            title="Adicionar subpágina"
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate(page.id);
+            }}
+            className="p-1 hover:bg-[#333333] text-[#858585] hover:text-[#EDEDED] rounded"
+            title="Duplicar página"
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+          {allPages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(page.id);
+              }}
+              className="p-1 hover:bg-[#333333] text-[#858585] hover:text-rose-400 rounded"
+              title="Mover para a lixeira"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
         </div>
       </div>
+
+      {isExpanded && children.length > 0 && (
+        <div className="ml-3 pl-2 border-l border-[#2F2F2F] space-y-0.5 mt-0.5">
+          {children.map((child) => (
+            <SidebarItem
+              key={child.id}
+              page={child}
+              allPages={allPages}
+              activeId={activeId}
+              expanded={expanded}
+              onSelect={onSelect}
+              onToggle={onToggle}
+              onCreateChild={onCreateChild}
+              onDuplicate={onDuplicate}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

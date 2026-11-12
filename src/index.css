@@ -65,3 +65,239 @@
 .spinner {
   @apply inline-block rounded-full border-2 border-slate-600 border-t-white animate-spin;
 }
+
+/* =========================================================
+   ESTILOS DO EDITOR TIPTAP — NOTION DARK (#191919)
+   ========================================================= */
+   .tiptap {
+    outline: none !important;
+    color: #EDEDED;
+    font-size: 0.875rem; /* 14px no celular */
+  }
+  
+  @media (min-width: 768px) {
+    .tiptap {
+      font-size: 1.1rem; /* ~17.6px no PC: leitura encorpada igual ao Notion */
+    }
+  }
+  
+  .tiptap p {
+    margin: 0.4rem 0;
+    line-height: 1.7;
+  }
+  
+  .tiptap h1 {
+    font-size: 2.15rem;
+    font-weight: 800;
+    color: #FFFFFF;
+    margin-top: 1.5rem;
+    margin-bottom: 0.45rem;
+    line-height: 1.25;
+  }
+  
+  .tiptap h2 {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #F5F5F5;
+    margin-top: 1.25rem;
+    margin-bottom: 0.35rem;
+    line-height: 1.3;
+  }
+  
+  .tiptap h3 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #EDEDED;
+    margin-top: 1rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  .tiptap h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #D4D4D4;
+    margin-top: 0.8rem;
+    margin-bottom: 0.2rem;
+  }
+  
+  /* Placeholder estilo Notion */
+  .tiptap .is-empty::before {
+    color: #555555;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+  
+  /* Listas com marcadores e numeradas */
+  .tiptap ul {
+    list-style-type: disc;
+    padding-left: 1.4rem;
+    margin: 0.4rem 0;
+  }
+  
+  .tiptap ol {
+    list-style-type: decimal;
+    padding-left: 1.4rem;
+    margin: 0.4rem 0;
+  }
+  
+  /* Lista de Tarefas (TaskList) — Transparente e Alinhada como no Notion */
+  ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+    margin: 0.35rem 0;
+  }
+  
+  ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0.25rem 0;
+  }
+  
+  ul[data-type="taskList"] li > label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.65em; /* Alinha perfeitamente com a altura da linha do texto */
+    user-select: none;
+    flex-shrink: 0;
+    margin: 0;
+  }
+  
+  ul[data-type="taskList"] li > label input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background-color: transparent;
+    border: 1.5px solid #858585;
+    border-radius: 3px;
+    cursor: pointer;
+    margin: 0;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+  }
+  
+  ul[data-type="taskList"] li > label input[type="checkbox"]:hover {
+    border-color: #EDEDED;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  ul[data-type="taskList"] li > label input[type="checkbox"]:checked {
+    background-color: #2383E2;
+    border-color: #2383E2;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3E%3C/svg%3E");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  
+  ul[data-type="taskList"] li > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  
+  /* Remove a margem vertical extra do parágrafo dentro da tarefa para não desalinhar */
+  ul[data-type="taskList"] li > div > p {
+    margin: 0 !important;
+    line-height: 1.65;
+  }
+  
+  ul[data-type="taskList"] li[data-checked="true"] > div {
+    text-decoration: line-through;
+    color: #858585;
+  }
+  
+  /* Citações e Código */
+  .tiptap blockquote {
+    border-left: 3px solid #454545;
+    padding-left: 1rem;
+    margin: 0.75rem 0;
+    color: #D4D4D4;
+    font-style: italic;
+  }
+  
+  .tiptap pre {
+    background: #202020;
+    border: 1px solid #373737;
+    border-radius: 0.5rem;
+    padding: 0.85rem 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+  }
+  
+  .tiptap code {
+    background: #2C2C2C;
+    color: #EB5757;
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+  }
+  
+  .tiptap pre code {
+    background: transparent;
+    color: #EDEDED;
+    padding: 0;
+  }
+  
+  .tiptap hr {
+    border: none;
+    border-top: 1px solid #2F2F2F;
+    margin: 1.25rem 0;
+  }
+  
+  /* Sistema de 2 e 3 Colunas Reais */
+  .notion-column-list {
+    display: grid;
+    gap: 1.5rem;
+    margin: 0.75rem 0;
+    width: 100%;
+  }
+  
+  .notion-column-list.cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  
+  .notion-column-list.cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  
+  @media (max-width: 768px) {
+    .notion-column-list.cols-2,
+    .notion-column-list.cols-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  .notion-column {
+    min-width: 0;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0;
+  }
+  
+  /* Tabelas Editáveis */
+  .tiptap table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+    overflow: hidden;
+    table-layout: fixed;
+  }
+  
+  .tiptap td,
+  .tiptap th {
+    border: 1px solid #373737;
+    padding: 0.5rem 0.75rem;
+    vertical-align: top;
+    position: relative;
+    min-width: 90px;
+  }
+  
+  .tiptap th {
+    background-color: #252525;
+    font-weight: 600;
+    text-align: left;
+  }
