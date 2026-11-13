@@ -28,25 +28,13 @@ import {
   Sparkles,
   Type,
   ChevronDown,
-  Calculator,
+  Plus,
 } from 'lucide-react';
 import { NOTION_COLORS } from './types';
 
 // ============================================================================
-// MOTOR DE CÁLCULO AUTOMÁTICO (SOMA, SUBTRAÇÃO, MULTIPLICAÇÃO, DIVISÃO)
+// FUNÇÕES DE CÁLCULO SIMPLIFICADO (APENAS SOMA E SUBTRAÇÃO)
 // ============================================================================
-export interface MathSummary {
-  numbers: number[];
-  hasCurrency: boolean;
-  expressionResult: number | null;
-  sum: number;
-  subtraction: number;
-  multiplication: number;
-  division: number | null;
-  average: number;
-}
-
-// Localiza a posição exata logo abaixo do bloco atual mantendo-se dentro da mesma coluna/container
 export function getSafeBlockInsertPos($pos: any): number {
   for (let d = $pos.depth; d >= 1; d--) {
     const parentName = $pos.node(d - 1).type.name;
@@ -71,13 +59,10 @@ export function parseBrazilianNumber(raw: string): number | null {
 
   let normalized = cleaned;
   if (cleaned.includes('.') && cleaned.includes(',')) {
-    // Ex: 1.500,50 -> 1500.50
     normalized = cleaned.replace(/\./g, '').replace(',', '.');
   } else if (cleaned.includes(',')) {
-    // Ex: 1500,50 -> 1500.50
     normalized = cleaned.replace(',', '.');
   } else if (/^-?\d{1,3}(?:\.\d{3})+$/.test(cleaned)) {
-    // Ex: 1.500 (milhar sem centavos) -> 1500
     normalized = cleaned.replace(/\./g, '');
   }
 
@@ -93,48 +78,12 @@ export function formatMathValue(val: number, asCurrency = true): string {
   return asCurrency ? `R$ ${formatted}` : formatted;
 }
 
-// Avalia expressões matemáticas seguras como "1500 - 80 - 485" ou "(188,30 + 149,99) / 2"
-export function evaluateMathExpression(rawText: string): {
-  result: number;
+export function calculateSumAndSubtraction(text: string): {
+  numbers: number[];
   hasCurrency: boolean;
+  sum: number;
+  subtraction: number;
 } | null {
-  const hasCurrency = /R\$/i.test(rawText);
-  const withoutEquals = rawText.replace(/=\s*$/, '').trim();
-
-  // Extrai o trecho final que contém números e operadores matemáticos
-  const match = withoutEquals.match(/([R$\s\d.,()+*/-]+[\d,.)])\s*$/);
-  const candidate = match ? match[1] : withoutEquals;
-
-  // Precisa ter ao menos um operador matemático real (+, -, *, /) entre números
-  if (!/[+*/]|\d\s*-\s*[R$\s]*\d/.test(candidate)) {
-    return null;
-  }
-
-  const sanitized = candidate
-    .replace(/R\$/gi, '')
-    .replace(/\d+(?:\.\d{3})+(?:,\d+)?|\d+,\d+|\d+\.\d+|\d+/g, (numMatch) => {
-      const parsed = parseBrazilianNumber(numMatch);
-      return parsed !== null ? String(parsed) : numMatch;
-    })
-    .replace(/[^0-9.+\-*/()\s]/g, '')
-    .trim();
-
-  if (!sanitized || !/\d/.test(sanitized)) return null;
-
-  try {
-    const fn = new Function(`return (${sanitized});`);
-    const res = Number(fn());
-    if (Number.isFinite(res)) {
-      return { result: res, hasCurrency };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-// Extrai números de múltiplas linhas ou colunas e calcula +, -, *, /
-export function analyzeTextNumbers(text: string): MathSummary | null {
   const hasCurrency = /R\$/i.test(text);
   const lines = text
     .split(/\r?\n/)
@@ -144,96 +93,70 @@ export function analyzeTextNumbers(text: string): MathSummary | null {
   const numbers: number[] = [];
 
   for (const line of lines) {
-    // Ignora linhas que já são de Total/Restante/Resultado para não duplicar a conta
-    if (/^(total|restante|saldo|resultado|média|media)\s*:/i.test(line)) {
+    if (/^(total|restante|saldo|resultado)\s*:/i.test(line)) {
       continue;
     }
 
-    // Prioriza valores com R$ na linha (evita capturar números de nomes como "7x1" ou "2 colunas")
     const currencyMatches = Array.from(
-      line.matchAll(/(-?\s*R\$\s*\d+(?:\.\d{3})*(?:,\d+)?)/gi)
+      line.matchAll(/(R\$\s*\d+(?:\.\d{3})*(?:,\d+)?)/gi)
     );
 
     if (currencyMatches.length > 0) {
       for (const m of currencyMatches) {
-        const isNegative = m[0].trim().startsWith('-') || line.startsWith('-');
-        const val = parseBrazilianNumber(m[0].replace('-', ''));
+        const val = parseBrazilianNumber(m[0]);
         if (val !== null) {
-          numbers.push(isNegative ? -Math.abs(val) : val);
+          numbers.push(Math.abs(val));
         }
       }
       continue;
     }
 
-    // Caso não tenha R$, busca números decimais ou no final da linha (ex: "Internet: 149,99")
     const numberMatches = Array.from(
       line.matchAll(
-        /(?:^|[\s:+-])(-?\d+(?:\.\d{3})*,\d+|-?\d+(?:\.\d{3})+|-?\d+(?:\.\d+)?)(?=\s|$)/g
+        /(?:^|[\s:+-])(\d+(?:\.\d{3})*,\d+|\d+(?:\.\d{3})+|\d+(?:\.\d+)?)(?=\s|$)/g
       )
     );
     if (numberMatches.length > 0) {
       const lastMatch = numberMatches[numberMatches.length - 1][1];
       const val = parseBrazilianNumber(lastMatch);
       if (val !== null) {
-        numbers.push(val);
+        numbers.push(Math.abs(val));
       }
     }
   }
 
-  const exprEval = lines.length === 1 ? evaluateMathExpression(lines[0]) : null;
+  if (numbers.length === 0) return null;
 
-  if (numbers.length === 0 && !exprEval) return null;
-
-  const absNumbers = numbers.map((n) => Math.abs(n));
   const sum = numbers.reduce((acc, n) => acc + n, 0);
   const subtraction =
-    absNumbers.length >= 2
-      ? absNumbers[0] - absNumbers.slice(1).reduce((acc, n) => acc + n, 0)
+    numbers.length >= 2
+      ? numbers[0] - numbers.slice(1).reduce((acc, n) => acc + n, 0)
       : sum;
-  const multiplication =
-    absNumbers.length >= 2 ? absNumbers.reduce((acc, n) => acc * n, 1) : sum;
-  const division =
-    absNumbers.length >= 2 && absNumbers[1] !== 0
-      ? absNumbers[0] / absNumbers[1]
-      : null;
-  const average = numbers.length > 0 ? sum / numbers.length : 0;
 
   return {
     numbers,
-    hasCurrency: hasCurrency || Boolean(exprEval?.hasCurrency),
-    expressionResult: exprEval ? exprEval.result : null,
+    hasCurrency,
     sum,
     subtraction,
-    multiplication,
-    division,
-    average,
   };
 }
 
 // ============================================================================
-// 1. BUBBLE TOOLBAR (BARRA FLUTUANTE DE SELEÇÃO DE TEXTO)
+// 1. BUBBLE TOOLBAR (APENAS OPÇÕES DE FORMATAÇÃO DE TEXTO)
 // ============================================================================
 interface BubbleToolbarProps {
   editor: Editor | null;
   onAddComment: (selectedText: string) => void;
-  onCreateSubpage: () => void;
+  onCreateSubpage?: () => void;
 }
 
 export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
   editor,
   onAddComment,
-  onCreateSubpage,
 }) => {
   const [coords, setCoords] = useState<{ x: number; y: number } | null>(null);
-  const [openMenu, setOpenMenu] = useState<'none' | 'turnInto' | 'color' | 'link' | 'calc'>('none');
+  const [openMenu, setOpenMenu] = useState<'none' | 'turnInto' | 'color' | 'link'>('none');
   const [linkUrl, setLinkUrl] = useState('');
-  const [recentColors, setRecentColors] = useState<string[]>([
-    '#D44C47',
-    '#D9730D',
-    '#448361',
-    '#337EA9',
-    '#9065B0',
-  ]);
   const [, setFormatTick] = useState(0);
 
   const updateSelection = useCallback(() => {
@@ -241,9 +164,8 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     const { selection, doc } = editor.state;
     const { from, to, empty } = selection;
 
-    // Ignora seleções automáticas de blocos (como Subpágina) e seleções sem texto real
     const isNodeSelection = 'node' in selection && Boolean((selection as any).node);
-    const selectedText = doc.textBetween(from, to, '\n');
+    const selectedText = doc.textBetween(from, to, ' ');
 
     if (empty || from === to || isNodeSelection || !selectedText.trim()) {
       setCoords((prev) => (prev ? null : prev));
@@ -254,20 +176,32 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     try {
       const start = editor.view.coordsAtPos(from);
       const end = editor.view.coordsAtPos(to);
-      const toolbarWidth = Math.min(390, window.innerWidth - 20);
+      const isMobileOrTouch =
+        window.innerWidth < 768 || window.matchMedia('(pointer: coarse)').matches;
+
+      const toolbarWidth = isMobileOrTouch
+        ? Math.min(310, window.innerWidth - 16)
+        : 340;
+
+      // Mantém margem segura à esquerda para não cobrir os botões "+" e "::"
+      const minLeft = window.innerWidth >= 400 ? 54 : 12;
       const x = Math.max(
-        10,
+        minLeft,
         Math.min(
           (start.left + end.left) / 2 - toolbarWidth / 2,
-          window.innerWidth - toolbarWidth - 10
+          window.innerWidth - toolbarWidth - 8
         )
       );
 
-      // Se estiver perto do topo da janela, abre abaixo da seleção para não cobrir o texto
-      const y =
-        start.top - 48 < 12
-          ? Math.min(window.innerHeight - 60, end.bottom + 10)
-          : start.top - 48;
+      // No celular: posiciona ABAIXO da seleção (+34px) para não colidir com o Copiar/Colar nativo
+      // No PC: posiciona ACIMA da seleção (-44px) em linha única sem cobrir o "+"
+      let y: number;
+      if (isMobileOrTouch) {
+        const belowY = end.bottom + 34;
+        y = belowY + 56 > window.innerHeight ? Math.max(12, start.top - 92) : belowY;
+      } else {
+        y = start.top - 44 < 12 ? end.bottom + 12 : start.top - 44;
+      }
 
       setCoords((prev) => {
         if (prev && Math.abs(prev.x - x) < 1 && Math.abs(prev.y - y) < 1) {
@@ -305,9 +239,8 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
   if (!editor || !coords) return null;
 
-  // Abre os submenus para cima quando a barra está perto da borda inferior da tela
-  const openUpwards = coords.y > window.innerHeight - 360;
-  const dropdownPositionClass = openUpwards ? 'bottom-10 mb-1' : 'top-9 mt-1';
+  const openUpwards = coords.y > window.innerHeight - 340;
+  const dropdownPositionClass = openUpwards ? 'bottom-full mb-1.5' : 'top-full mt-1.5';
 
   const currentTypeLabel = () => {
     if (editor.isActive('heading', { level: 1 })) return 'Título 1';
@@ -317,11 +250,9 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     if (editor.isActive('bulletList')) return 'Lista';
     if (editor.isActive('orderedList')) return 'Numerada';
     if (editor.isActive('taskList')) return 'Tarefas';
-    if (editor.isActive('toggleBlock')) return 'Alternante';
-    if (editor.isActive('calloutBlock')) return 'Destaque';
     if (editor.isActive('blockquote')) return 'Citação';
     if (editor.isActive('codeBlock')) return 'Código';
-    return 'Texto normal';
+    return 'Texto';
   };
 
   const applyTextColor = (color: string) => {
@@ -329,7 +260,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       editor.chain().focus().unsetColor().run();
     } else {
       editor.chain().focus().setColor(color).run();
-      setRecentColors((prev) => [color, ...prev.filter((c) => c !== color)].slice(0, 5));
     }
     setOpenMenu('none');
   };
@@ -357,50 +287,12 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     setOpenMenu('none');
   };
 
-  const getSelectedText = (separator = ' ') => {
+  const getSelectedText = () => {
     const { from, to } = editor.state.selection;
-    return editor.state.doc.textBetween(from, to, separator);
+    return editor.state.doc.textBetween(from, to, ' ');
   };
 
-  const mathSummary = analyzeTextNumbers(getSelectedText('\n'));
-
-  const insertCalculationResult = (label: string, value: number, asCurrency: boolean) => {
-    const { state } = editor;
-    const { from, to } = state.selection;
-
-    // Recua até o último caractere real selecionado para não pular linhas vazias nem sair da coluna
-    let safeTo = to;
-    while (safeTo > from) {
-      const charBefore = state.doc.textBetween(safeTo - 1, safeTo, '');
-      if (charBefore.trim().length > 0) {
-        break;
-      }
-      safeTo--;
-    }
-
-    const $end = state.doc.resolve(safeTo);
-    const insertPos = getSafeBlockInsertPos($end);
-    const formatted = formatMathValue(value, asCurrency);
-
-    editor
-      .chain()
-      .focus()
-      .insertContentAt(insertPos, {
-        type: 'paragraph',
-        content: [
-          {
-            type: 'text',
-            text: `${label}: ${formatted}`,
-            marks: [{ type: 'bold' }],
-          },
-        ],
-      })
-      .run();
-
-    setOpenMenu('none');
-    setCoords(null);
-  };
-
+  // Apenas conversões diretas de texto e lista (sem duplicar blocos estruturais do menu "+")
   const turnIntoItems = [
     {
       label: 'Texto',
@@ -433,10 +325,10 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       active: editor.isActive('heading', { level: 4 }),
     },
     {
-      label: 'Página',
-      icon: FileText,
-      action: () => onCreateSubpage(),
-      active: false,
+      label: 'Lista de tarefas',
+      icon: CheckSquare,
+      action: () => editor.chain().focus().toggleTaskList().run(),
+      active: editor.isActive('taskList'),
     },
     {
       label: 'Lista com marcadores',
@@ -451,88 +343,16 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       active: editor.isActive('orderedList'),
     },
     {
-      label: 'Lista de tarefas',
-      icon: CheckSquare,
-      action: () => editor.chain().focus().toggleTaskList().run(),
-      active: editor.isActive('taskList'),
-    },
-    {
-      label: 'Lista de alternantes',
-      icon: ChevronRight,
-      action: () => {
-        const text = getSelectedText().trim();
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: 'toggleBlock',
-            attrs: { summary: text || 'Lista de alternantes', open: true },
-            content: [{ type: 'paragraph' }],
-          })
-          .run();
-      },
-      active: editor.isActive('toggleBlock'),
-    },
-    {
-      label: 'Código',
-      icon: Code,
-      action: () => editor.chain().focus().toggleCodeBlock().run(),
-      active: editor.isActive('codeBlock'),
-    },
-    {
       label: 'Citação',
       icon: Quote,
       action: () => editor.chain().focus().toggleBlockquote().run(),
       active: editor.isActive('blockquote'),
     },
     {
-      label: 'Frase de destaque',
-      icon: Sparkles,
-      action: () => {
-        const text = getSelectedText().trim();
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: 'calloutBlock',
-            content: [
-              {
-                type: 'paragraph',
-                content: text ? [{ type: 'text', text }] : [],
-              },
-            ],
-          })
-          .run();
-      },
-      active: editor.isActive('calloutBlock'),
-    },
-    {
-      label: '2 colunas',
-      icon: Columns,
-      action: () => {
-        const text = getSelectedText().trim();
-        editor
-          .chain()
-          .focus()
-          .insertContent({
-            type: 'columnList',
-            attrs: { columns: 2 },
-            content: [
-              {
-                type: 'column',
-                content: [
-                  {
-                    type: 'paragraph',
-                    content: text ? [{ type: 'text', text }] : [],
-                  },
-                ],
-              },
-              { type: 'column', content: [{ type: 'paragraph' }] },
-            ],
-          })
-          .run();
-      },
-      active: false,
+      label: 'Bloco de código',
+      icon: Code,
+      action: () => editor.chain().focus().toggleCodeBlock().run(),
+      active: editor.isActive('codeBlock'),
     },
   ];
 
@@ -544,14 +364,14 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
           e.preventDefault();
         }
       }}
-      className="fixed z-50 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1 flex flex-wrap items-center gap-0.5 text-xs text-[#F1F5F9] select-none max-w-[calc(100vw-20px)]"
+      className="fixed z-50 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl px-1.5 py-1 flex flex-nowrap items-center gap-0.5 text-xs text-[#F1F5F9] select-none whitespace-nowrap max-w-[calc(100vw-16px)]"
     >
-      {/* Seletor "Texto normal" (Transformar em) */}
-      <div className="relative">
+      {/* Seletor "Texto" (Transformar em) */}
+      <div className="relative shrink-0">
         <button
           type="button"
           onClick={() => setOpenMenu(openMenu === 'turnInto' ? 'none' : 'turnInto')}
-          className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-[#222A33] font-medium transition"
+          className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#222A33] font-medium transition"
         >
           <Type className="w-3.5 h-3.5 text-[#94A3B8]" />
           <span>{currentTypeLabel()}</span>
@@ -560,7 +380,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
         {openMenu === 'turnInto' && (
           <div
-            className={`absolute left-0 ${dropdownPositionClass} w-56 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1.5 space-y-0.5 max-h-72 overflow-y-auto z-50`}
+            className={`absolute left-0 ${dropdownPositionClass} w-52 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-1.5 space-y-0.5 max-h-72 overflow-y-auto z-50`}
           >
             <div className="px-2 py-1 text-[10px] text-[#94A3B8] uppercase font-semibold">
               Transformar em
@@ -586,14 +406,14 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
-      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
+      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5 shrink-0" />
 
       {/* Botão Paleta de Cores "A" */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           type="button"
           onClick={() => setOpenMenu(openMenu === 'color' ? 'none' : 'color')}
-          className="px-2 py-1 rounded hover:bg-[#222A33] font-bold border border-[#1E293B] text-xs"
+          className="px-1.5 py-1 rounded hover:bg-[#222A33] font-bold border border-[#1E293B] text-xs"
           title="Cor do texto e fundo"
         >
           A
@@ -601,27 +421,8 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
         {openMenu === 'color' && (
           <div
-            className={`absolute left-0 ${dropdownPositionClass} w-56 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-3 space-y-3 z-50 max-h-[75vh] overflow-y-auto`}
+            className={`absolute left-0 ${dropdownPositionClass} w-52 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-3 space-y-3 z-50 max-h-[70vh] overflow-y-auto whitespace-normal`}
           >
-            <div>
-              <div className="text-[11px] text-[#94A3B8] mb-1.5 font-medium">
-                Usado recentemente
-              </div>
-              <div className="flex items-center gap-1.5">
-                {recentColors.map((hex, i) => (
-                  <button
-                    key={`${hex}-${i}`}
-                    type="button"
-                    onClick={() => applyTextColor(hex)}
-                    style={{ color: hex }}
-                    className="w-7 h-7 rounded-md border border-[#1E293B] hover:border-[#F1F5F9] flex items-center justify-center font-bold text-sm bg-[#12161A]"
-                  >
-                    A
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div>
               <div className="text-[11px] text-[#94A3B8] mb-1.5 font-medium">Cor do texto</div>
               <div className="grid grid-cols-5 gap-1.5">
@@ -663,7 +464,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
-        className={`p-1.5 rounded hover:bg-[#222A33] ${
+        className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] shrink-0 ${
           editor.isActive('bold') ? 'text-blue-400 bg-[#222A33]' : ''
         }`}
         title="Negrito (Ctrl+B)"
@@ -673,7 +474,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={`p-1.5 rounded hover:bg-[#222A33] ${
+        className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] shrink-0 ${
           editor.isActive('italic') ? 'text-blue-400 bg-[#222A33]' : ''
         }`}
         title="Itálico (Ctrl+I)"
@@ -683,7 +484,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleUnderline().run()}
-        className={`p-1.5 rounded hover:bg-[#222A33] ${
+        className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] shrink-0 ${
           editor.isActive('underline') ? 'text-blue-400 bg-[#222A33]' : ''
         }`}
         title="Sublinhado (Ctrl+U)"
@@ -693,7 +494,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleStrike().run()}
-        className={`p-1.5 rounded hover:bg-[#222A33] ${
+        className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] shrink-0 ${
           editor.isActive('strike') ? 'text-blue-400 bg-[#222A33]' : ''
         }`}
         title="Tachado (Ctrl+Shift+X)"
@@ -703,7 +504,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleCode().run()}
-        className={`p-1.5 rounded hover:bg-[#222A33] ${
+        className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] shrink-0 ${
           editor.isActive('code') ? 'text-blue-400 bg-[#222A33]' : ''
         }`}
         title="Código em linha"
@@ -712,7 +513,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       </button>
 
       {/* Inserir / Editar Link */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           type="button"
           onClick={() => {
@@ -720,7 +521,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
             setLinkUrl(existingHref);
             setOpenMenu(openMenu === 'link' ? 'none' : 'link');
           }}
-          className={`p-1.5 rounded hover:bg-[#222A33] ${
+          className={`p-1 sm:p-1.5 rounded hover:bg-[#222A33] ${
             editor.isActive('link') ? 'text-blue-400 bg-[#222A33]' : ''
           }`}
           title="Inserir Link (Ctrl+K)"
@@ -730,7 +531,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
         {openMenu === 'link' && (
           <div
-            className={`absolute right-0 sm:left-0 ${dropdownPositionClass} w-60 bg-[#181E24] border border-[#1E293B] rounded-xl p-2 shadow-2xl flex items-center gap-1 z-50`}
+            className={`absolute right-0 ${dropdownPositionClass} w-60 bg-[#181E24] border border-[#1E293B] rounded-xl p-2 shadow-2xl flex items-center gap-1 z-50`}
           >
             <input
               type="url"
@@ -759,146 +560,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
-      {/* Botão Calculadora Automática (+, -, ×, ÷) quando houver números na seleção */}
-      {mathSummary && (
-        <>
-          <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setOpenMenu(openMenu === 'calc' ? 'none' : 'calc')}
-              className={`flex items-center gap-1 px-2 py-1 rounded transition font-semibold ${
-                openMenu === 'calc'
-                  ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40'
-                  : 'hover:bg-[#222A33] text-emerald-400'
-              }`}
-              title="Calcular valores selecionados (Soma, Subtração, Multiplicação, Divisão)"
-            >
-              <Calculator className="w-3.5 h-3.5" />
-              <span>Calcular</span>
-            </button>
-
-            {openMenu === 'calc' && (
-              <div
-                className={`absolute right-0 ${dropdownPositionClass} w-64 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl p-2 space-y-1 z-50`}
-              >
-                <div className="px-2 py-1 text-[10px] text-[#94A3B8] uppercase font-semibold flex items-center justify-between">
-                  <span>Cálculo Automático</span>
-                  <span>{mathSummary.numbers.length} val.</span>
-                </div>
-
-                {mathSummary.expressionResult !== null && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      insertCalculationResult(
-                        'Resultado',
-                        mathSummary.expressionResult!,
-                        mathSummary.hasCurrency
-                      )
-                    }
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-left"
-                  >
-                    <span className="text-[#F1F5F9] font-medium">Expressão (=)</span>
-                    <span className="font-bold text-emerald-400">
-                      {formatMathValue(mathSummary.expressionResult, mathSummary.hasCurrency)}
-                    </span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    insertCalculationResult('Total', mathSummary.sum, mathSummary.hasCurrency)
-                  }
-                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
-                >
-                  <span className="text-[#94A3B8]">Soma (+)</span>
-                  <span className="font-bold text-emerald-400">
-                    {formatMathValue(mathSummary.sum, mathSummary.hasCurrency)}
-                  </span>
-                </button>
-
-                {mathSummary.numbers.length >= 2 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        insertCalculationResult(
-                          'Restante',
-                          mathSummary.subtraction,
-                          mathSummary.hasCurrency
-                        )
-                      }
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
-                    >
-                      <span className="text-[#94A3B8]">Subtração / Saldo (-)</span>
-                      <span className="font-bold text-amber-400">
-                        {formatMathValue(mathSummary.subtraction, mathSummary.hasCurrency)}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        insertCalculationResult(
-                          'Total',
-                          mathSummary.multiplication,
-                          mathSummary.hasCurrency
-                        )
-                      }
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
-                    >
-                      <span className="text-[#94A3B8]">Multiplicação (×)</span>
-                      <span className="font-bold text-blue-400">
-                        {formatMathValue(mathSummary.multiplication, mathSummary.hasCurrency)}
-                      </span>
-                    </button>
-
-                    {mathSummary.division !== null && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          insertCalculationResult(
-                            'Divisão',
-                            mathSummary.division!,
-                            mathSummary.hasCurrency
-                          )
-                        }
-                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
-                      >
-                        <span className="text-[#94A3B8]">Divisão (÷)</span>
-                        <span className="font-bold text-purple-400">
-                          {formatMathValue(mathSummary.division, mathSummary.hasCurrency)}
-                        </span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        insertCalculationResult(
-                          'Média',
-                          mathSummary.average,
-                          mathSummary.hasCurrency
-                        )
-                      }
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-[#222A33] text-left"
-                    >
-                      <span className="text-[#94A3B8]">Média por item</span>
-                      <span className="font-semibold text-[#F1F5F9]">
-                        {formatMathValue(mathSummary.average, mathSummary.hasCurrency)}
-                      </span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5" />
+      <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5 shrink-0" />
 
       {/* Botão Comentário */}
       <button
@@ -908,7 +570,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
           if (text) onAddComment(text);
           setCoords(null);
         }}
-        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-[#222A33] text-[#F1F5F9]"
+        className="flex items-center gap-1 p-1 sm:px-2 sm:py-1 rounded hover:bg-[#222A33] text-[#F1F5F9] shrink-0"
         title="Comentar trecho selecionado"
       >
         <MessageSquare className="w-3.5 h-3.5 text-[#94A3B8]" />
@@ -919,7 +581,7 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 };
 
 // ============================================================================
-// 2. SLASH COMMAND MENU (MENU DE COMANDOS "/" E BOTÃO "+")
+// 2. SLASH COMMAND MENU (MENU DO BOTÃO "+" E ATALHO "/")
 // ============================================================================
 interface SlashCommandMenuProps {
   editor: Editor | null;
@@ -945,13 +607,16 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   const [filter, setFilter] = useState(initialQuery);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const isDesktop =
+    typeof window !== 'undefined'
+      ? window.innerWidth >= 1024 && !window.matchMedia('(pointer: coarse)').matches
+      : true;
 
   useEffect(() => {
     setFilter(initialQuery);
     setSelectedIndex(0);
   }, [initialQuery, visible]);
 
-  // Mantém o item selecionado sempre visível ao navegar pelas setas do teclado
   useEffect(() => {
     if (visible && itemRefs.current[selectedIndex]) {
       itemRefs.current[selectedIndex]?.scrollIntoView({ block: 'nearest' });
@@ -960,21 +625,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 
   const items = useMemo(
     () => [
-      // Cálculo Rápido
-      {
-        group: 'Cálculo Automático',
-        label: 'Somar valores (+)',
-        desc: 'Soma automaticamente os valores da coluna ou lista.',
-        icon: Calculator,
-        action: () => onAutoCalculate?.('sum'),
-      },
-      {
-        group: 'Cálculo Automático',
-        label: 'Calcular saldo / subtração (-)',
-        desc: 'Subtrai as despesas do primeiro valor (ex: Salário - Gastos).',
-        icon: Calculator,
-        action: () => onAutoCalculate?.('subtraction'),
-      },
       // Blocos Básicos
       {
         group: 'Blocos básicos',
@@ -1013,6 +663,13 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
       },
       {
         group: 'Blocos básicos',
+        label: 'Lista de tarefas',
+        desc: 'Acompanhe tarefas com caixas de seleção.',
+        icon: CheckSquare,
+        action: () => editor?.chain().focus().toggleTaskList().run(),
+      },
+      {
+        group: 'Blocos básicos',
         label: 'Lista com marcadores',
         desc: 'Crie uma lista simples.',
         icon: List,
@@ -1024,13 +681,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         desc: 'Crie uma lista com numeração.',
         icon: ListOrdered,
         action: () => editor?.chain().focus().toggleOrderedList().run(),
-      },
-      {
-        group: 'Blocos básicos',
-        label: 'Lista de tarefas',
-        desc: 'Acompanhe tarefas com caixas de seleção.',
-        icon: CheckSquare,
-        action: () => editor?.chain().focus().toggleTaskList().run(),
       },
       {
         group: 'Blocos básicos',
@@ -1076,6 +726,21 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         desc: 'Divida blocos visualmente com uma linha.',
         icon: Minus,
         action: () => editor?.chain().focus().setHorizontalRule().run(),
+      },
+      // Cálculo (Apenas Soma e Subtração)
+      {
+        group: 'Cálculo',
+        label: 'Somar valores (+)',
+        desc: 'Soma os valores da lista ou seção atual.',
+        icon: Plus,
+        action: () => onAutoCalculate?.('sum'),
+      },
+      {
+        group: 'Cálculo',
+        label: 'Subtrair valores (-)',
+        desc: 'Subtrai os gastos do primeiro valor da seção.',
+        icon: Minus,
+        action: () => onAutoCalculate?.('subtraction'),
       },
       // Layout & Avançado
       {
@@ -1194,7 +859,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
     }
   };
 
-  // Garante que o menu (w-72 = 288px) nunca saia da tela no celular ou perto do rodapé
   const safeLeft = Math.max(12, Math.min(x, window.innerWidth - 300));
   const safeTop = y > window.innerHeight - 340 ? Math.max(16, y - 330) : y;
 
@@ -1233,8 +897,8 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
             editor.commands.focus();
           }
         }}
-        placeholder="Filtrar blocos ou calcular..."
-        autoFocus
+        placeholder="Filtrar blocos..."
+        autoFocus={isDesktop}
         className="w-full bg-[#12161A] border border-[#1E293B] rounded-lg px-2.5 py-1.5 text-xs text-[#F1F5F9] placeholder-[#94A3B8] mb-2 focus:outline-none"
       />
 

@@ -20,11 +20,6 @@ import {
   ArrowDown,
   PanelLeftClose,
   PanelLeftOpen,
-  CheckSquare,
-  Bold,
-  Calculator,
-  Indent,
-  Outdent,
 } from 'lucide-react';
 import { NotePage, PAGE_ICONS, PAGE_COVERS } from '@/notes/types';
 import {
@@ -38,8 +33,7 @@ import { createEnchiridionExtensions, PageBridgeContext, PageBridge } from '@/no
 import {
   BubbleToolbar,
   SlashCommandMenu,
-  evaluateMathExpression,
-  analyzeTextNumbers,
+  calculateSumAndSubtraction,
   formatMathValue,
   getSafeBlockInsertPos,
 } from '@/notes/Menus';
@@ -122,11 +116,7 @@ export default function Anotacoes() {
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedQuoteForComment, setSelectedQuoteForComment] = useState<string | undefined>();
 
-  // 3. Estados da Barra Rápida Mobile (acima do teclado)
-  const [editorFocused, setEditorFocused] = useState(false);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-
-  // 4. Estados dos Menus Flutuantes do Editor e Gutter ("+" e "::")
+  // 3. Estados dos Menus Flutuantes do Editor e Gutter ("+" e "::")
   const [slashMenu, setSlashMenu] = useState<SlashMenuState>({
     visible: false,
     x: 0,
@@ -146,7 +136,7 @@ export default function Anotacoes() {
     targetPos: -1,
   });
 
-  // 5. Referências para evitar Stale Closures nos callbacks do Tiptap
+  // 4. Referências para evitar Stale Closures nos callbacks do Tiptap
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const activePageIdRef = useRef<string>(activePageId);
@@ -179,39 +169,24 @@ export default function Anotacoes() {
     slashMenuVisibleRef.current = slashMenu.visible;
   }, [slashMenu.visible]);
 
-  // Monitora a altura do teclado virtual no celular via visualViewport
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.visualViewport) return;
-    const vv = window.visualViewport;
-    const handleViewportChange = () => {
-      const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKeyboardOffset(offset);
-    };
-    vv.addEventListener('resize', handleViewportChange);
-    vv.addEventListener('scroll', handleViewportChange);
-    return () => {
-      vv.removeEventListener('resize', handleViewportChange);
-      vv.removeEventListener('scroll', handleViewportChange);
-    };
-  }, []);
-
-  // 6. Inicialização do Motor Tiptap com Avaliação Automática ao digitar "=" + Espaço/Enter
+  // 5. Inicialização do Motor Tiptap
   const extensions = useMemo(() => createEnchiridionExtensions(), []);
 
   const editor = useEditor({
     extensions,
     content: activePage?.content || { type: 'doc', content: [{ type: 'paragraph' }] },
-    onFocus: () => setEditorFocused(true),
-    onBlur: () => {
-      setTimeout(() => setEditorFocused(false), 180);
-    },
     editorProps: {
       attributes: {
         class:
           'tiptap focus:outline-none min-h-[55vh] text-[#F1F5F9] text-sm md:text-[1.1rem] leading-relaxed',
       },
+      // Impede que o ProseMirror role a página automaticamente quando o editor não está focado
+      handleScrollToSelection: (view) => {
+        if (!view.hasFocus()) return true;
+        return false;
+      },
       handleKeyDown: (view, event) => {
-        // Abre menu "/" apenas no início da linha (permite usar "/" em datas, divisões e textos como Netflix/HBO)
+        // Abre menu "/" apenas no início da linha
         if (event.key === '/' && !slashMenuVisibleRef.current) {
           const { $from } = view.state.selection;
           const textBefore = $from.parent.textBetween(0, $from.parentOffset, '');
@@ -236,7 +211,6 @@ export default function Anotacoes() {
           const { empty, $from } = state.selection;
 
           if (empty && $from.parentOffset === 0) {
-            // Caso 1: Cursor no início de um parágrafo logo abaixo de um bloco de colunas
             if ($from.depth === 1 && $from.index(0) > 0) {
               const prevNode = state.doc.child($from.index(0) - 1);
               if (prevNode.type.name === 'columnList') {
@@ -246,10 +220,8 @@ export default function Anotacoes() {
 
                 event.preventDefault();
                 if (currNode.textContent.trim() === '') {
-                  // Se a linha estiver vazia, apaga a linha
                   dispatch(state.tr.delete(currStart, currEnd));
                 } else {
-                  // Se tiver texto (ex: Total que caiu fora da coluna), move para o final da última coluna
                   const insertInsideColPos = currStart - 2;
                   const tr = state.tr.delete(currStart, currEnd);
                   dispatch(tr.insert(insertInsideColPos, currNode));
@@ -258,7 +230,6 @@ export default function Anotacoes() {
               }
             }
 
-            // Caso 2: Cursor no primeiro parágrafo de uma coluna quando todo o columnList está vazio
             for (let d = $from.depth; d >= 1; d--) {
               if ($from.node(d).type.name === 'columnList') {
                 const colListNode = $from.node(d);
@@ -271,25 +242,6 @@ export default function Anotacoes() {
                   return true;
                 }
                 break;
-              }
-            }
-          }
-        }
-
-        // Cálculo automático em linha quando termina com "=" e aperta Espaço ou Enter
-        // Ex: "1500 - 80 - 485 - 200 =" -> "1500 - 80 - 485 - 200 = R$ 735,00"
-        if (event.key === ' ' || event.key === 'Enter') {
-          const { $from, empty } = view.state.selection;
-          if (empty) {
-            const lineTextBeforeCursor = $from.parent.textBetween(0, $from.parentOffset, '');
-            if (lineTextBeforeCursor.trimEnd().endsWith('=')) {
-              const evaluated = evaluateMathExpression(lineTextBeforeCursor);
-              if (evaluated) {
-                event.preventDefault();
-                const formatted = formatMathValue(evaluated.result, evaluated.hasCurrency);
-                const prefix = lineTextBeforeCursor.endsWith(' ') ? '' : ' ';
-                view.dispatch(view.state.tr.insertText(`${prefix}${formatted}`));
-                return true;
               }
             }
           }
@@ -308,97 +260,89 @@ export default function Anotacoes() {
     },
   });
 
-  // Executa cálculo automático mantendo o resultado sempre dentro da mesma coluna/bloco
+  // Executa Soma (+) ou Subtração (-) pelo menu "+" lendo apenas a seção/coluna atual
   const triggerSmartCalculation = useCallback(
-    (defaultMode: 'sum' | 'subtraction' = 'sum') => {
+    (mode: 'sum' | 'subtraction') => {
       if (!editor) return;
       const { state } = editor;
-      const { from, to, empty, $from } = state.selection;
+      const { $from } = state.selection;
 
-      // 1. Se houver texto selecionado, calcula o trecho e insere logo abaixo dentro da mesma coluna
-      if (!empty && from !== to) {
-        const selectedText = state.doc.textBetween(from, to, '\n');
-        const summary = analyzeTextNumbers(selectedText);
-        if (summary) {
-          const val =
-            summary.expressionResult !== null
-              ? summary.expressionResult
-              : defaultMode === 'subtraction'
-              ? summary.subtraction
-              : summary.sum;
-          const label =
-            summary.expressionResult !== null
-              ? 'Resultado'
-              : defaultMode === 'subtraction'
-              ? 'Restante'
-              : 'Total';
-
-          let safeTo = to;
-          while (safeTo > from) {
-            const charBefore = state.doc.textBetween(safeTo - 1, safeTo, '');
-            if (charBefore.trim().length > 0) break;
-            safeTo--;
-          }
-
-          const $end = state.doc.resolve(safeTo);
-          const insertPos = getSafeBlockInsertPos($end);
-
-          editor
-            .chain()
-            .focus()
-            .insertContentAt(insertPos, {
-              type: 'paragraph',
-              content: [
-                {
-                  type: 'text',
-                  text: `${label}: ${formatMathValue(val, summary.hasCurrency)}`,
-                  marks: [{ type: 'bold' }],
-                },
-              ],
-            })
-            .run();
-        }
-        return;
-      }
-
-      // 2. Se a linha atual tiver uma expressão matemática (ex: "1500 - 80 - 485"), resolve na mesma linha
-      const currentLineText = $from.parent.textContent;
-      const lineEval = evaluateMathExpression(currentLineText);
-      if (lineEval) {
-        const endOfLinePos = $from.end();
-        const suffix = currentLineText.trimEnd().endsWith('=')
-          ? ` ${formatMathValue(lineEval.result, lineEval.hasCurrency)}`
-          : ` = ${formatMathValue(lineEval.result, lineEval.hasCurrency)}`;
-        editor.chain().focus().insertContentAt(endOfLinePos, suffix).run();
-        return;
-      }
-
-      // 3. Caso contrário, lê todos os valores da coluna/lista atual do topo do bloco até o cursor
-      let containerText = '';
+      // Localiza o container atual (coluna, destaque, alternante ou documento)
+      let containerDepth = 0;
       for (let d = $from.depth; d >= 1; d--) {
-        const node = $from.node(d);
+        const name = $from.node(d).type.name;
         if (
-          node.type.name === 'column' ||
-          node.type.name === 'taskList' ||
-          node.type.name === 'bulletList' ||
-          node.type.name === 'orderedList' ||
-          node.type.name === 'toggleBlock' ||
-          node.type.name === 'calloutBlock'
+          name === 'column' ||
+          name === 'calloutBlock' ||
+          name === 'toggleBlock' ||
+          name === 'tableCell' ||
+          name === 'tableHeader'
         ) {
-          containerText = state.doc.textBetween($from.start(d), $from.end(), '\n');
+          containerDepth = d;
           break;
         }
       }
-      if (!containerText) {
-        containerText = state.doc.textBetween(0, $from.end(), '\n');
+
+      const containerStart = containerDepth === 0 ? 0 : $from.start(containerDepth);
+      const currentBlockEnd = $from.end();
+
+      // Coleta as linhas do container até a linha onde o "+" foi acionado
+      const blocksUpToCursor: { type: string; text: string }[] = [];
+      state.doc.nodesBetween(containerStart, currentBlockEnd, (node) => {
+        if (
+          node.type.name === 'paragraph' ||
+          node.type.name === 'heading' ||
+          node.type.name === 'horizontalRule' ||
+          node.type.name === 'pageLink'
+        ) {
+          blocksUpToCursor.push({
+            type: node.type.name,
+            text: node.textContent || '',
+          });
+          return false;
+        }
+        return true;
+      });
+
+      // Percorre de baixo para cima coletando apenas a seção atual (para em divisores, linhas vazias ou Totais anteriores)
+      const sectionLines: string[] = [];
+      let foundNumbersInSection = false;
+
+      for (let i = blocksUpToCursor.length - 1; i >= 0; i--) {
+        const b = blocksUpToCursor[i];
+        const trimmed = b.text.trim();
+
+        if (b.type === 'horizontalRule' || b.type === 'pageLink') {
+          break;
+        }
+
+        if (/^(total|restante|saldo|resultado)\s*:/i.test(trimmed)) {
+          if (foundNumbersInSection) break;
+          continue;
+        }
+
+        if (trimmed === '') {
+          if (foundNumbersInSection) break;
+          continue;
+        }
+
+        sectionLines.unshift(trimmed);
+        if (/\d/.test(trimmed)) {
+          foundNumbersInSection = true;
+        }
+
+        if (b.type === 'heading' && foundNumbersInSection) {
+          break;
+        }
       }
 
-      const summary = analyzeTextNumbers(containerText);
+      const summary = calculateSumAndSubtraction(sectionLines.join('\n'));
       if (!summary || summary.numbers.length === 0) return;
 
-      const value = defaultMode === 'subtraction' ? summary.subtraction : summary.sum;
-      const label = defaultMode === 'subtraction' ? 'Restante' : 'Total';
+      const value = mode === 'subtraction' ? summary.subtraction : summary.sum;
+      const label = mode === 'subtraction' ? 'Restante' : 'Total';
       const formatted = formatMathValue(value, summary.hasCurrency);
+      const currentLineText = $from.parent.textContent;
 
       if (currentLineText.trim() === '') {
         editor
@@ -431,43 +375,7 @@ export default function Anotacoes() {
     [editor]
   );
 
-  // Funções de recuo (Tab / Shift+Tab) para os botões da Barra Rápida Mobile
-  const handleMobileIndent = (direction: 'in' | 'out') => {
-    if (!editor) return;
-    if (editor.isActive('taskItem')) {
-      if (direction === 'in') editor.chain().focus().sinkListItem('taskItem').run();
-      else editor.chain().focus().liftListItem('taskItem').run();
-      return;
-    }
-    if (editor.isActive('listItem')) {
-      if (direction === 'in') editor.chain().focus().sinkListItem('listItem').run();
-      else editor.chain().focus().liftListItem('listItem').run();
-      return;
-    }
-
-    const { state, dispatch } = editor.view;
-    const { from, to } = state.selection;
-    let tr = state.tr;
-    let changed = false;
-
-    state.doc.nodesBetween(from, to, (node, pos) => {
-      if (node.type.name === 'paragraph' || node.type.name === 'heading') {
-        const currentIndent = node.attrs.indent || 0;
-        const nextIndent =
-          direction === 'in' ? Math.min(6, currentIndent + 1) : Math.max(0, currentIndent - 1);
-        if (nextIndent !== currentIndent) {
-          tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: nextIndent });
-          changed = true;
-        }
-        return false;
-      }
-    });
-
-    if (changed && dispatch) dispatch(tr);
-    editor.commands.focus();
-  };
-
-  // 7. Sincronização de Conteúdo ao Alternar de Página
+  // 6. Sincronização de Conteúdo ao Alternar de Página
   useEffect(() => {
     if (!editor || !activePage) return;
     const currentJSON = JSON.stringify(editor.getJSON());
@@ -483,7 +391,7 @@ export default function Anotacoes() {
     setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   }, [activePage?.id, editor]);
 
-  // 8. Salvamento Automático com Debounce (400ms)
+  // 7. Salvamento Automático com Debounce (400ms)
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -770,9 +678,13 @@ export default function Anotacoes() {
   };
 
   const handleEditorTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    const targetEl = e.target as HTMLElement;
+    if (targetEl.closest('ul[data-type="taskList"] > li > label')) {
+      return;
+    }
     const touch = e.touches[0];
     if (touch) {
-      updateGutterByCoordinates(touch.clientX, touch.clientY, e.target as HTMLElement);
+      updateGutterByCoordinates(touch.clientX, touch.clientY, targetEl);
     }
   };
 
@@ -963,7 +875,6 @@ export default function Anotacoes() {
                   ENCHIRIDION
                 </span>
 
-                {/* Quando recolhido no celular, exibe a página atual ao lado de ENCHIRIDION */}
                 {!sidebarOpen && (
                   <div className="flex items-center gap-1.5 text-xs text-[#94A3B8] truncate lg:hidden">
                     <span className="text-[#475569]">•</span>
@@ -988,7 +899,6 @@ export default function Anotacoes() {
                   <FolderPlus className="w-4 h-4" />
                 </button>
 
-                {/* Seta indicadora de acordeão no celular */}
                 <span className="p-1 text-[#94A3B8] lg:hidden">
                   {sidebarOpen ? (
                     <ChevronDown className="w-4 h-4" />
@@ -997,7 +907,6 @@ export default function Anotacoes() {
                   )}
                 </span>
 
-                {/* Botão de recolher exclusivo para PC */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1012,7 +921,6 @@ export default function Anotacoes() {
               </div>
             </div>
 
-            {/* Conteúdo interno do Acordeão / Sidebar (visível apenas quando aberto) */}
             {sidebarOpen && (
               <>
                 {/* Busca Global */}
@@ -1196,10 +1104,9 @@ export default function Anotacoes() {
             ÁREA PRINCIPAL DO DOCUMENTO (#12161A ENCHIRIDION THEME)
            =================================================================== */}
         <main className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative">
-          {/* Barra Superior: Breadcrumbs limpos no mobile, Status, Calculadora e Opções */}
+          {/* Barra Superior Limpa: Breadcrumbs, Status, Favorito, Comentários e Opções */}
           <div className="flex items-center justify-between px-3 sm:px-6 h-12 border-b border-[#1E293B] text-xs select-none">
             <div className="flex items-center gap-1.5 overflow-x-auto">
-              {/* Botão de reabrir sidebar visível APENAS no PC quando recolhida */}
               {!sidebarOpen && (
                 <button
                   type="button"
@@ -1227,7 +1134,6 @@ export default function Anotacoes() {
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Indicador de Salvamento Automático */}
               <span className="text-[11px] text-[#94A3B8] flex items-center gap-1">
                 {saveStatus === 'saving' && 'Salvando...'}
                 {saveStatus === 'saved' && (
@@ -1239,17 +1145,6 @@ export default function Anotacoes() {
                 {saveStatus === 'error' && <span className="text-rose-400">Erro</span>}
               </span>
 
-              {/* Botão de Cálculo Automático Rápido no topo */}
-              <button
-                type="button"
-                onClick={() => triggerSmartCalculation('sum')}
-                className="p-1.5 rounded hover:bg-[#181E24] text-[#94A3B8] hover:text-emerald-400 transition"
-                title="Calcular linha/coluna atual automaticamente"
-              >
-                <Calculator className="w-4 h-4" />
-              </button>
-
-              {/* Favoritar Página */}
               <button
                 type="button"
                 onClick={() => updatePage(activePage.id, { isFavorite: !activePage.isFavorite })}
@@ -1261,7 +1156,6 @@ export default function Anotacoes() {
                 <Star className="w-4 h-4" fill={activePage.isFavorite ? 'currentColor' : 'none'} />
               </button>
 
-              {/* Painel de Comentários */}
               <button
                 type="button"
                 onClick={() => setShowComments(!showComments)}
@@ -1276,7 +1170,6 @@ export default function Anotacoes() {
                 )}
               </button>
 
-              {/* Menu Opções (Exportar / Importar) */}
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
@@ -1372,11 +1265,9 @@ export default function Anotacoes() {
             </div>
           )}
 
-          {/* Corpo Centralizado com Margem Esquerda Calibrada (pl-14 no mobile / sm:px-16 no PC) */}
-          <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 pb-24 flex-1 flex flex-col">
-            {/* Cabeçalho da Página: Ícone, Botões Discretos e Título */}
+          {/* Corpo Centralizado com Margem Esquerda Calibrada */}
+          <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 flex-1 flex flex-col">
             <div className="group mb-6">
-              {/* Seletor de Ícone */}
               <div className="relative inline-block mb-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
@@ -1406,7 +1297,6 @@ export default function Anotacoes() {
                 )}
               </div>
 
-              {/* Ações discretas estilo Notion ("Adicionar capa", "Adicionar comentário") */}
               <div className="flex items-center gap-3 text-xs text-[#94A3B8] mb-2 h-6 opacity-80 group-hover:opacity-100 transition-opacity select-none">
                 {!activePage.cover && (
                   <button
@@ -1451,7 +1341,6 @@ export default function Anotacoes() {
                 </div>
               )}
 
-              {/* Título Editável Direto */}
               <input
                 type="text"
                 value={activePage.title}
@@ -1467,7 +1356,6 @@ export default function Anotacoes() {
               />
             </div>
 
-            {/* Painel de Comentários (Se aberto) */}
             {showComments && (
               <div className="mb-6 bg-[#181E24] border border-[#1E293B] rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between text-xs font-semibold text-[#94A3B8] uppercase">
@@ -1564,7 +1452,7 @@ export default function Anotacoes() {
               </div>
             )}
 
-            {/* Container do Editor com área de captura estendida (-ml-14 pl-14 no mobile / sm:-ml-16 sm:pl-16 no PC) */}
+            {/* Container do Editor com Alças "+" e "::" */}
             <div
               ref={editorWrapperRef}
               onMouseMove={handleEditorMouseMove}
@@ -1576,7 +1464,6 @@ export default function Anotacoes() {
               }}
               className="relative flex-1 -ml-14 pl-14 sm:-ml-16 sm:pl-16"
             >
-              {/* Alças "+" e "::" visíveis por completo no Celular e no PC sem invadir a primeira letra */}
               {gutter.visible && (
                 <div
                   style={{ top: gutter.top, left: gutter.left }}
@@ -1587,7 +1474,7 @@ export default function Anotacoes() {
                     onClick={(e) => {
                       e.stopPropagation();
                       if (editor && gutter.pos >= 0) {
-                        editor.chain().focus().setTextSelection(gutter.pos).run();
+                        editor.chain().setTextSelection(gutter.pos).run();
                       }
                       const rect = e.currentTarget.getBoundingClientRect();
                       setSlashMenu({
@@ -1598,7 +1485,7 @@ export default function Anotacoes() {
                       });
                     }}
                     className="p-0.5 sm:p-1 rounded hover:bg-[#181E24] text-[#94A3B8] hover:text-[#F1F5F9]"
-                    title="Clique para inserir bloco"
+                    title="Clique para inserir bloco ou calcular"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -1625,7 +1512,6 @@ export default function Anotacoes() {
                 </div>
               )}
 
-              {/* Menu Contextual do Bloco (ao clicar em "::") */}
               {blockActionMenu.visible && (
                 <div
                   style={{ left: blockActionMenu.x, top: blockActionMenu.y }}
@@ -1664,118 +1550,11 @@ export default function Anotacoes() {
                 </div>
               )}
 
-              {/* Editor de Documento Tiptap */}
               <EditorContent editor={editor} />
             </div>
           </div>
 
-          {/* =================================================================
-              BARRA RÁPIDA MOBILE ACIMA DO TECLADO (EXCLUSIVA PARA CELULAR)
-             ================================================================= */}
-          {editorFocused && editor && (
-            <div
-              style={{
-                bottom: keyboardOffset > 0 ? `${keyboardOffset + 8}px` : '4.5rem',
-              }}
-              onMouseDown={(e) => e.preventDefault()}
-              className="lg:hidden fixed left-2.5 right-2.5 z-40 bg-[#181E24]/95 backdrop-blur-md border border-[#1E293B] rounded-xl shadow-2xl px-2 py-1.5 flex items-center justify-between gap-1 text-xs text-[#F1F5F9] select-none"
-            >
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {/* Abrir Menu de Blocos (+) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const { from } = editor.state.selection;
-                    const coords = editor.view.coordsAtPos(from);
-                    setSlashMenu({
-                      visible: true,
-                      x: coords.left,
-                      y: coords.bottom + 6,
-                      query: '',
-                    });
-                  }}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-[#222A33] text-[#F1F5F9] font-medium shrink-0"
-                >
-                  <Plus className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Bloco</span>
-                </button>
-
-                {/* Alternar Tarefa / Checkbox */}
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleTaskList().run()}
-                  className={`p-1.5 rounded-lg shrink-0 ${
-                    editor.isActive('taskList')
-                      ? 'bg-blue-600/20 text-blue-400'
-                      : 'hover:bg-[#222A33] text-[#94A3B8]'
-                  }`}
-                  title="Lista de tarefas"
-                >
-                  <CheckSquare className="w-4 h-4" />
-                </button>
-
-                {/* Diminuir Recuo (Shift+Tab) */}
-                <button
-                  type="button"
-                  onClick={() => handleMobileIndent('out')}
-                  className="p-1.5 rounded-lg hover:bg-[#222A33] text-[#94A3B8] shrink-0"
-                  title="Diminuir recuo"
-                >
-                  <Outdent className="w-4 h-4" />
-                </button>
-
-                {/* Aumentar Recuo (Tab) */}
-                <button
-                  type="button"
-                  onClick={() => handleMobileIndent('in')}
-                  className="p-1.5 rounded-lg hover:bg-[#222A33] text-[#94A3B8] shrink-0"
-                  title="Aumentar recuo (Tab)"
-                >
-                  <Indent className="w-4 h-4" />
-                </button>
-
-                {/* Negrito */}
-                <button
-                  type="button"
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={`p-1.5 rounded-lg shrink-0 ${
-                    editor.isActive('bold')
-                      ? 'bg-blue-600/20 text-blue-400'
-                      : 'hover:bg-[#222A33] text-[#94A3B8]'
-                  }`}
-                  title="Negrito"
-                >
-                  <Bold className="w-4 h-4" />
-                </button>
-
-                {/* Cálculo Automático (+ / -) */}
-                <button
-                  type="button"
-                  onClick={() => triggerSmartCalculation('sum')}
-                  className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold shrink-0"
-                  title="Calcular automaticamente"
-                >
-                  <Calculator className="w-3.5 h-3.5" />
-                  <span>Calc</span>
-                </button>
-              </div>
-
-              {/* Fechar Teclado */}
-              <button
-                type="button"
-                onClick={() => {
-                  editor.commands.blur();
-                  setEditorFocused(false);
-                }}
-                className="px-2 py-1 rounded-lg bg-[#12161A] border border-[#1E293B] text-[#94A3B8] hover:text-[#F1F5F9] shrink-0"
-                title="Ocultar teclado"
-              >
-                OK
-              </button>
-            </div>
-          )}
-
-          {/* Barra Flutuante de Seleção de Texto */}
+          {/* Barra Flutuante de Seleção de Texto (Apenas Formatação de Texto) */}
           <BubbleToolbar
             editor={editor}
             onAddComment={(quote) => {
@@ -1785,7 +1564,7 @@ export default function Anotacoes() {
             onCreateSubpage={createSubpageInsideEditor}
           />
 
-          {/* Menu Slash "/" */}
+          {/* Menu do Botão "+" e "/" (Blocos + Soma e Subtração) */}
           <SlashCommandMenu
             editor={editor}
             visible={slashMenu.visible}
