@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
+    "@supabase/supabase-js": "^2.119.0",
     "@tiptap/extension-color": "^3.33.1",
     "@tiptap/extension-highlight": "^3.33.1",
     "@tiptap/extension-image": "^3.33.1",

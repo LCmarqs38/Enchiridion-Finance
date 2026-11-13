@@ -25,6 +25,9 @@ import { NotePage, PAGE_ICONS, PAGE_COVERS } from '@/notes/types';
 import {
   loadAndMigratePages,
   savePagesToStorage,
+  syncPagesWithSupabase,
+  pushPagesToSupabase,
+  deletePageFromSupabase,
   extractPlainTextFromJSON,
   jsonToMarkdown,
   markdownToTiptapJSON,
@@ -103,6 +106,7 @@ export default function Anotacoes() {
   const [expandedPages, setExpandedPages] = useState<Record<string, boolean>>({ 'root-1': true });
   const [searchQuery, setSearchQuery] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [cloudSyncedAt, setCloudSyncedAt] = useState<number>(0);
 
   // 2. Estados de Interface (Acordeão inicia recolhido no celular e aberto no PC)
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
@@ -142,6 +146,7 @@ export default function Anotacoes() {
   const activePageIdRef = useRef<string>(activePageId);
   const slashMenuVisibleRef = useRef<boolean>(slashMenu.visible);
   const isInitialMountRef = useRef<boolean>(true);
+  const skipNextCloudPushRef = useRef<boolean>(false);
 
   const activePage = useMemo(
     () =>
@@ -375,7 +380,7 @@ export default function Anotacoes() {
     [editor]
   );
 
-  // 6. Sincronização de Conteúdo ao Alternar de Página
+  // 6. Sincronização de Conteúdo ao Alternar de Página ou Receber Dados da Nuvem
   useEffect(() => {
     if (!editor || !activePage) return;
     const currentJSON = JSON.stringify(editor.getJSON());
@@ -389,20 +394,51 @@ export default function Anotacoes() {
     setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
     setBlockActionMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
     setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-  }, [activePage?.id, editor]);
+  }, [activePage?.id, cloudSyncedAt, editor]);
 
-  // 7. Salvamento Automático com Debounce (400ms)
+  // 7. Carrega e mescla páginas da nuvem (Supabase) ao iniciar
+  useEffect(() => {
+    let active = true;
+    syncPagesWithSupabase(pages).then((merged) => {
+      if (active && merged && merged.length > 0) {
+        skipNextCloudPushRef.current = true;
+        setPages(merged);
+        setCloudSyncedAt(Date.now());
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // 8. Salvamento Automático Local (400ms) + Nuvem Supabase (1.2s)
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
       return;
     }
+
+    if (skipNextCloudPushRef.current) {
+      skipNextCloudPushRef.current = false;
+      savePagesToStorage(pages);
+      setSaveStatus('saved');
+      return;
+    }
+
     setSaveStatus('saving');
-    const timer = setTimeout(() => {
+    const localTimer = setTimeout(() => {
       const ok = savePagesToStorage(pages);
       setSaveStatus(ok ? 'saved' : 'error');
     }, 400);
-    return () => clearTimeout(timer);
+
+    const cloudTimer = setTimeout(() => {
+      pushPagesToSupabase(pages);
+    }, 1200);
+
+    return () => {
+      clearTimeout(localTimer);
+      clearTimeout(cloudTimer);
+    };
   }, [pages]);
 
   // ============================================================================
@@ -534,6 +570,7 @@ export default function Anotacoes() {
 
   const permanentDeletePage = useCallback((pageId: string) => {
     setPages((prev) => prev.filter((p) => p.id !== pageId));
+    deletePageFromSupabase(pageId);
   }, []);
 
   const handleAddComment = useCallback(() => {

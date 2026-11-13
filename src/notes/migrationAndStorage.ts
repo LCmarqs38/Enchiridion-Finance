@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/react';
 import type { NotePage } from './types';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export interface LegacyBlock {
   id?: string;
@@ -10,10 +11,41 @@ export interface LegacyBlock {
   targetPageId?: string;
 }
 
-const STORAGE_KEY = 'enchiridion_notion_pages_v8';
+const BASE_STORAGE_KEY = 'enchiridion_notion_pages_v8';
 const BACKUP_MIGRATION_KEY = 'enchiridion_pre_tiptap_backup_v8';
 
-// Garante que nunca seja criado um nó { type: 'text', text: '' } (proibido pelo ProseMirror)
+// Identifica o nome de usuário logado atualmente para isolar os dados
+export function getCurrentUserNamespace(): string {
+  try {
+    const raw = localStorage.getItem('pf_auth_user');
+    if (!raw) return 'default';
+    const parsed = JSON.parse(raw);
+    const identifier = (parsed?.username || parsed?.name || parsed?.email || 'default')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+    return identifier || 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export function getUserNotesStorageKey(): string {
+  const ns = getCurrentUserNamespace();
+  return `${ns}::${BASE_STORAGE_KEY}`;
+}
+
+function toCloudPageId(ns: string, localId: string): string {
+  return `${ns}::${localId}`;
+}
+
+function fromCloudPageId(ns: string, cloudId: string | null | undefined): string | null {
+  if (!cloudId) return null;
+  const prefix = `${ns}::`;
+  return cloudId.startsWith(prefix) ? cloudId.slice(prefix.length) : cloudId;
+}
+
 function createTextContent(text: string): JSONContent[] {
   return text ? [{ type: 'text', text }] : [];
 }
@@ -24,7 +56,6 @@ function createParagraphNode(inlineContent?: JSONContent[]): JSONContent {
     : { type: 'paragraph' };
 }
 
-// Converte string HTML simples de blocos legados para nós de texto/marks do Tiptap
 export function parseHtmlToTiptapInline(html: string): JSONContent[] {
   if (!html || html === '<br>') return [];
   const temp = document.createElement('div');
@@ -95,7 +126,6 @@ export function parseHtmlToTiptapInline(html: string): JSONContent[] {
   return result;
 }
 
-// Faz o merge de itens de lista consecutivos (tarefas, marcadores, numeradas) no mesmo bloco pai
 function appendListItem(
   content: JSONContent[],
   listType: 'taskList' | 'bulletList' | 'orderedList',
@@ -198,10 +228,20 @@ export function migrateLegacyBlocksToTiptap(blocks: LegacyBlock[]): JSONContent 
 }
 
 export function loadAndMigratePages(): NotePage[] {
+  const ns = getCurrentUserNamespace();
+  const userKey = getUserNotesStorageKey();
+  const legacyOwner = localStorage.getItem('pf_notes_legacy_migrated_owner');
+  const canInheritLegacy = !legacyOwner || legacyOwner === 'admin' || legacyOwner === ns;
+
   const keys = [
-    'enchiridion_notion_pages_v8',
-    'enchiridion_notion_pages_v7',
-    'enchiridion_notion_pages_v6',
+    userKey,
+    ...(canInheritLegacy
+      ? [
+          'enchiridion_notion_pages_v8',
+          'enchiridion_notion_pages_v7',
+          'enchiridion_notion_pages_v6',
+        ]
+      : []),
   ];
 
   for (const key of keys) {
@@ -211,7 +251,6 @@ export function loadAndMigratePages(): NotePage[] {
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) continue;
 
-      // Salva backup intocado antes da primeira migração
       if (!localStorage.getItem(BACKUP_MIGRATION_KEY)) {
         localStorage.setItem(BACKUP_MIGRATION_KEY, raw);
       }
@@ -238,7 +277,10 @@ export function loadAndMigratePages(): NotePage[] {
         };
       });
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+      localStorage.setItem(userKey, JSON.stringify(migrated));
+      if (!legacyOwner || legacyOwner === 'admin') {
+        localStorage.setItem('pf_notes_legacy_migrated_owner', ns);
+      }
       return migrated;
     } catch (err) {
       console.error('Erro ao ler/migrar chave:', key, err);
@@ -266,7 +308,8 @@ export function loadAndMigratePages(): NotePage[] {
 
 export function savePagesToStorage(pages: NotePage[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+    const userKey = getUserNotesStorageKey();
+    localStorage.setItem(userKey, JSON.stringify(pages));
     return true;
   } catch (err) {
     console.error('Erro ao salvar páginas no localStorage:', err);
@@ -274,7 +317,124 @@ export function savePagesToStorage(pages: NotePage[]): boolean {
   }
 }
 
-// Extrai texto puro de um JSONContent para busca global (inclui blocos especiais)
+// ============================================================================
+// SINCRONIZAÇÃO COM SUPABASE ISOLADA PELO NOME DE USUÁRIO (note_pages)
+// ============================================================================
+export async function syncPagesWithSupabase(localPages: NotePage[]): Promise<NotePage[] | null> {
+  if (!isSupabaseConfigured || !supabase) return null;
+
+  const ns = getCurrentUserNamespace();
+  const prefix = `${ns}::`;
+
+  try {
+    const { data: remoteRows, error } = await supabase
+      .from('note_pages')
+      .select('*')
+      .like('id', `${prefix}%`)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar note_pages no Supabase:', error.message);
+      return null;
+    }
+
+    const remoteMap = new Map<string, NotePage>();
+    for (const row of remoteRows || []) {
+      const localId = fromCloudPageId(ns, row.id) || row.id;
+      const localParentId = fromCloudPageId(ns, row.parent_id);
+
+      remoteMap.set(localId, {
+        id: localId,
+        title: row.title ?? 'Sem título',
+        icon: row.icon || '📝',
+        cover: row.cover || undefined,
+        parentId: localParentId,
+        isFavorite: Boolean(row.is_favorite),
+        isDeleted: Boolean(row.is_deleted),
+        comments: Array.isArray(row.comments) ? row.comments : [],
+        content: row.content || { type: 'doc', content: [{ type: 'paragraph' }] },
+        createdAt: Number(row.created_at) || Date.now(),
+        updatedAt: Number(row.updated_at) || Date.now(),
+      });
+    }
+
+    if (remoteMap.size === 0 && localPages.length > 0) {
+      await pushPagesToSupabase(localPages);
+      return localPages;
+    }
+
+    const mergedMap = new Map<string, NotePage>(remoteMap);
+    const toPush: NotePage[] = [];
+
+    for (const local of localPages) {
+      const remote = remoteMap.get(local.id);
+      if (!remote || local.updatedAt > remote.updatedAt) {
+        mergedMap.set(local.id, local);
+        toPush.push(local);
+      }
+    }
+
+    if (toPush.length > 0) {
+      await pushPagesToSupabase(toPush);
+    }
+
+    const mergedList = Array.from(mergedMap.values()).sort((a, b) => a.createdAt - b.createdAt);
+    savePagesToStorage(mergedList);
+    return mergedList;
+  } catch (err) {
+    console.error('Falha na sincronização com Supabase:', err);
+    return null;
+  }
+}
+
+export async function pushPagesToSupabase(pages: NotePage[]): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase || pages.length === 0) return false;
+
+  const ns = getCurrentUserNamespace();
+
+  try {
+    const payload = pages.map((p) => ({
+      id: toCloudPageId(ns, p.id),
+      title: p.title,
+      icon: p.icon || '📝',
+      cover: p.cover || null,
+      parent_id: p.parentId ? toCloudPageId(ns, p.parentId) : null,
+      is_favorite: Boolean(p.isFavorite),
+      is_deleted: Boolean(p.isDeleted),
+      comments: p.comments || [],
+      content: p.content,
+      created_at: p.createdAt,
+      updated_at: p.updatedAt,
+    }));
+
+    const { error } = await supabase
+      .from('note_pages')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Erro ao enviar note_pages para Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Erro inesperado ao salvar no Supabase:', err);
+    return false;
+  }
+}
+
+export async function deletePageFromSupabase(pageId: string): Promise<void> {
+  if (!isSupabaseConfigured || !supabase) return;
+  const ns = getCurrentUserNamespace();
+  try {
+    await supabase.from('note_pages').delete().eq('id', toCloudPageId(ns, pageId));
+  } catch (err) {
+    console.error('Erro ao excluir página permanentemente no Supabase:', err);
+  }
+}
+
+// ============================================================================
+// BUSCA E CONVERSÃO MARKDOWN
+// ============================================================================
 export function extractPlainTextFromJSON(node?: JSONContent): string {
   if (!node) return '';
   const parts: string[] = [];
@@ -295,7 +455,6 @@ export function extractPlainTextFromJSON(node?: JSONContent): string {
   return parts.join(' ').trim();
 }
 
-// Converte JSONContent do Tiptap para Markdown preservando formatações e blocos customizados
 export function jsonToMarkdown(doc: JSONContent, pageTitle: string): string {
   const lines: string[] = [`# ${pageTitle || 'Sem título'}\n`];
 
@@ -398,7 +557,6 @@ export function jsonToMarkdown(doc: JSONContent, pageTitle: string): string {
   return lines.join('\n');
 }
 
-// Importa Markdown para JSONContent do Tiptap agrupando listas e evitando nós vazios
 export function markdownToTiptapJSON(md: string): { title: string; content: JSONContent } {
   const rawLines = md.split(/\r?\n/);
   let title = 'Documento Importado';
