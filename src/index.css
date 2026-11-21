@@ -85,9 +85,6 @@
   @apply inline-block rounded-full border-2 border-slate-600 border-t-white animate-spin;
 }
 
-/* ==========================================================================
-   ESTILOS DO EDITOR DE BLOCOS TIPTAP (ENCHIRIDION DARK THEME)
-   ========================================================================== */
 .tiptap {
   outline: none !important;
   color: #F1F5F9;
@@ -171,7 +168,6 @@
   margin: 0.15rem 0;
 }
 
-/* Checklist / TaskList transparente estilo Notion */
 .tiptap ul[data-type="taskList"] {
   list-style: none;
   padding: 0;
@@ -247,7 +243,6 @@
   color: #64748B;
 }
 
-/* Citações, Código, Divisores e Tabelas */
 .tiptap blockquote {
   border-left: 3px solid #475569;
   padding-left: 1rem;
@@ -334,7 +329,6 @@
   pointer-events: none;
 }
 
-/* Sistema de 2 e 3 Colunas Reais */
 .notion-column-list {
   display: grid;
   gap: 3.5rem;

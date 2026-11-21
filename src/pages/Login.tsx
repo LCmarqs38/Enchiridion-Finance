@@ -29,6 +29,10 @@ function saveLocalUser(user: StoredUser) {
   localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
 }
 
+function persistSession(username: string, name: string) {
+  localStorage.setItem('pf_auth_user', JSON.stringify({ username, name }));
+}
+
 export default function Login({ onLoginSuccess }: LoginProps) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
@@ -42,8 +46,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
     const rawName = username.trim();
     const normalizedUser = rawName.toLowerCase().replace(/\s+/g, '_');
+    const cleanPassword = password.trim();
 
-    if (!normalizedUser || !password.trim()) {
+    if (!normalizedUser || !cleanPassword) {
       setError('Preencha o nome de usuário e a senha.');
       return;
     }
@@ -52,7 +57,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
     try {
       if (mode === 'register') {
-        // 1. Verifica se já existe no Supabase
         if (isSupabaseConfigured && supabase) {
           const { data: existing } = await supabase
             .from('app_users')
@@ -62,27 +66,24 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
           if (existing) {
             setError('Este nome de usuário já está em uso. Escolha outro ou faça login.');
-            setLoading(false);
             return;
           }
 
           const { error: insertErr } = await supabase.from('app_users').insert({
             username: normalizedUser,
             display_name: rawName,
-            password: password.trim(),
+            password: cleanPassword,
             created_at: Date.now(),
           });
 
           if (insertErr) {
             setError('Erro ao cadastrar no banco. Tente novamente.');
-            setLoading(false);
             return;
           }
         } else {
           const localUsers = getLocalUsers();
           if (localUsers[normalizedUser]) {
             setError('Este nome de usuário já existe neste dispositivo.');
-            setLoading(false);
             return;
           }
         }
@@ -90,21 +91,13 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         saveLocalUser({
           username: normalizedUser,
           displayName: rawName,
-          password: password.trim(),
+          password: cleanPassword,
         });
-
-        localStorage.setItem(
-          'pf_auth_user',
-          JSON.stringify({
-            username: normalizedUser,
-            name: rawName,
-          })
-        );
+        persistSession(normalizedUser, rawName);
         onLoginSuccess();
         return;
       }
 
-      // MODO LOGIN
       if (isSupabaseConfigured && supabase) {
         const { data: remoteUser } = await supabase
           .from('app_users')
@@ -113,9 +106,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           .maybeSingle();
 
         if (remoteUser) {
-          if (remoteUser.password !== password.trim()) {
+          if (remoteUser.password !== cleanPassword) {
             setError('Senha incorreta.');
-            setLoading(false);
             return;
           }
 
@@ -124,48 +116,30 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             displayName: remoteUser.display_name,
             password: remoteUser.password,
           });
-
-          localStorage.setItem(
-            'pf_auth_user',
-            JSON.stringify({
-              username: remoteUser.username,
-              name: remoteUser.display_name,
-            })
-          );
+          persistSession(remoteUser.username, remoteUser.display_name);
           onLoginSuccess();
           return;
         }
       }
 
-      // Fallback para usuários salvos localmente ou conta admin antiga
       const localUsers = getLocalUsers();
       const foundLocal = localUsers[normalizedUser];
 
-      if (foundLocal && foundLocal.password === password.trim()) {
-        localStorage.setItem(
-          'pf_auth_user',
-          JSON.stringify({
-            username: foundLocal.username,
-            name: foundLocal.displayName,
-          })
-        );
+      if (foundLocal && foundLocal.password === cleanPassword) {
+        persistSession(foundLocal.username, foundLocal.displayName);
         onLoginSuccess();
         return;
       }
 
-      if (normalizedUser === 'admin' && password.trim() === 'admin') {
-        localStorage.setItem(
-          'pf_auth_user',
-          JSON.stringify({
-            username: 'admin',
-            name: 'Admin',
-          })
-        );
+      if (normalizedUser === 'admin' && cleanPassword === 'admin') {
+        persistSession('admin', 'Admin');
         onLoginSuccess();
         return;
       }
 
-      setError('Usuário não encontrado ou senha incorreta. Se for seu primeiro acesso, clique em "Criar conta".');
+      setError(
+        'Usuário não encontrado ou senha incorreta. Se for seu primeiro acesso, clique em "Criar conta".'
+      );
     } catch {
       setError('Erro ao autenticar. Verifique sua conexão.');
     } finally {
@@ -176,7 +150,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   return (
     <div className="min-h-screen bg-[#090A0F] flex items-center justify-center p-4 text-slate-100">
       <div className="w-full max-w-md bg-[#0C0E14] border border-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-2xl">
-        {/* Logo & Título */}
         <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-700/80 flex items-center justify-center p-2 shadow-md mb-3">
             <svg
@@ -203,13 +176,10 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           </div>
           <h1 className="text-xl font-extrabold tracking-wider text-white">ENCHIRIDION</h1>
           <p className="text-xs text-slate-400 mt-1">
-            {mode === 'login'
-              ? 'Entre com seu nome de usuário para sincronizar seus dados'
-              : 'Cadastre seu usuário individual'}
+            {mode === 'login' ? 'Acesse sua conta' : 'Crie sua conta'}
           </p>
         </div>
 
-        {/* Alternador Entrar / Criar Conta */}
         <div className="grid grid-cols-2 gap-1 p-1 bg-[#12161A] border border-slate-800 rounded-xl mb-5 text-xs font-semibold">
           <button
             type="button"
@@ -218,9 +188,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               setError('');
             }}
             className={`py-2 rounded-lg transition ${
-              mode === 'login'
-                ? 'bg-blue-600 text-white shadow'
-                : 'text-slate-400 hover:text-white'
+              mode === 'login' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
             Entrar
@@ -252,7 +220,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Ex: lucas"
+                placeholder="Digite seu usuário"
                 autoComplete="username"
                 className="w-full bg-[#12161A] border border-slate-800 focus:border-blue-500 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none transition"
               />
@@ -293,7 +261,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             ) : (
               <>
                 <UserPlus className="w-4 h-4" />
-                <span>{loading ? 'Criando usuário...' : 'Cadastrar e Entrar'}</span>
+                <span>{loading ? 'Criando conta...' : 'Cadastrar e Entrar'}</span>
               </>
             )}
           </button>

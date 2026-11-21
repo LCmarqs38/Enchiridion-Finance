@@ -41,9 +41,6 @@ import {
   getSafeBlockInsertPos,
 } from '@/notes/Menus';
 
-// ============================================================================
-// TIPAGENS INTERNAS
-// ============================================================================
 interface SlashMenuState {
   visible: boolean;
   x: number;
@@ -77,7 +74,6 @@ interface SidebarItemProps {
   onDelete: (id: string) => void;
 }
 
-// Remove recursivamente links de subpáginas que foram movidas para a lixeira
 function removeDeletedPageLinksFromContent(
   node: JSONContent,
   deletedIds: Set<string>
@@ -93,11 +89,7 @@ function removeDeletedPageLinksFromContent(
   };
 }
 
-// ============================================================================
-// COMPONENTE PRINCIPAL: ANOTAÇÕES
-// ============================================================================
 export default function Anotacoes() {
-  // 1. Estados de Dados e Navegação
   const [pages, setPages] = useState<NotePage[]>(() => loadAndMigratePages());
   const [activePageId, setActivePageId] = useState<string>(() => {
     const firstValid = pages.find((p) => !p.isDeleted);
@@ -108,7 +100,6 @@ export default function Anotacoes() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [cloudSyncedAt, setCloudSyncedAt] = useState<number>(0);
 
-  // 2. Estados de Interface (Acordeão inicia recolhido no celular e aberto no PC)
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
   );
@@ -120,7 +111,6 @@ export default function Anotacoes() {
   const [newCommentText, setNewCommentText] = useState('');
   const [selectedQuoteForComment, setSelectedQuoteForComment] = useState<string | undefined>();
 
-  // 3. Estados dos Menus Flutuantes do Editor e Gutter ("+" e "::")
   const [slashMenu, setSlashMenu] = useState<SlashMenuState>({
     visible: false,
     x: 0,
@@ -140,7 +130,6 @@ export default function Anotacoes() {
     targetPos: -1,
   });
 
-  // 4. Referências para evitar Stale Closures nos callbacks do Tiptap
   const editorWrapperRef = useRef<HTMLDivElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const activePageIdRef = useRef<string>(activePageId);
@@ -156,7 +145,6 @@ export default function Anotacoes() {
     [pages, activePageId]
   );
 
-  // Seleciona página e recolhe automaticamente o acordeão no celular
   const handleSelectPage = useCallback((id: string) => {
     setActivePageId(id);
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -174,7 +162,6 @@ export default function Anotacoes() {
     slashMenuVisibleRef.current = slashMenu.visible;
   }, [slashMenu.visible]);
 
-  // 5. Inicialização do Motor Tiptap
   const extensions = useMemo(() => createEnchiridionExtensions(), []);
 
   const editor = useEditor({
@@ -185,13 +172,11 @@ export default function Anotacoes() {
         class:
           'tiptap focus:outline-none min-h-[55vh] text-[#F1F5F9] text-sm md:text-[1.1rem] leading-relaxed',
       },
-      // Impede que o ProseMirror role a página automaticamente quando o editor não está focado
       handleScrollToSelection: (view) => {
         if (!view.hasFocus()) return true;
         return false;
       },
       handleKeyDown: (view, event) => {
-        // Abre menu "/" apenas no início da linha
         if (event.key === '/' && !slashMenuVisibleRef.current) {
           const { $from } = view.state.selection;
           const textBefore = $from.parent.textBetween(0, $from.parentOffset, '');
@@ -210,7 +195,6 @@ export default function Anotacoes() {
           return false;
         }
 
-        // Destrava o Backspace em torno de blocos de colunas (columnList)
         if (event.key === 'Backspace') {
           const { state, dispatch } = view;
           const { empty, $from } = state.selection;
@@ -265,14 +249,12 @@ export default function Anotacoes() {
     },
   });
 
-  // Executa Soma (+) ou Subtração (-) pelo menu "+" lendo apenas a seção/coluna atual
   const triggerSmartCalculation = useCallback(
     (mode: 'sum' | 'subtraction') => {
       if (!editor) return;
       const { state } = editor;
       const { $from } = state.selection;
 
-      // Localiza o container atual (coluna, destaque, alternante ou documento)
       let containerDepth = 0;
       for (let d = $from.depth; d >= 1; d--) {
         const name = $from.node(d).type.name;
@@ -291,7 +273,6 @@ export default function Anotacoes() {
       const containerStart = containerDepth === 0 ? 0 : $from.start(containerDepth);
       const currentBlockEnd = $from.end();
 
-      // Coleta as linhas do container até a linha onde o "+" foi acionado
       const blocksUpToCursor: { type: string; text: string }[] = [];
       state.doc.nodesBetween(containerStart, currentBlockEnd, (node) => {
         if (
@@ -309,7 +290,6 @@ export default function Anotacoes() {
         return true;
       });
 
-      // Percorre de baixo para cima coletando apenas a seção atual (para em divisores, linhas vazias ou Totais anteriores)
       const sectionLines: string[] = [];
       let foundNumbersInSection = false;
 
@@ -380,7 +360,6 @@ export default function Anotacoes() {
     [editor]
   );
 
-  // 6. Sincronização de Conteúdo ao Alternar de Página ou Receber Dados da Nuvem
   useEffect(() => {
     if (!editor || !activePage) return;
     const currentJSON = JSON.stringify(editor.getJSON());
@@ -396,7 +375,6 @@ export default function Anotacoes() {
     setSlashMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
   }, [activePage?.id, cloudSyncedAt, editor]);
 
-  // 7. Carrega e mescla páginas da nuvem (Supabase) ao iniciar
   useEffect(() => {
     let active = true;
     syncPagesWithSupabase(pages).then((merged) => {
@@ -411,7 +389,6 @@ export default function Anotacoes() {
     };
   }, []);
 
-  // 8. Salvamento Automático Local (400ms) + Nuvem Supabase (1.2s)
   useEffect(() => {
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -441,9 +418,6 @@ export default function Anotacoes() {
     };
   }, [pages]);
 
-  // ============================================================================
-  // GERENCIAMENTO DE PÁGINAS E SUBPÁGINAS
-  // ============================================================================
   const updatePage = useCallback((id: string, updates: Partial<NotePage>) => {
     setPages((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: Date.now() } : p))
@@ -591,7 +565,6 @@ export default function Anotacoes() {
     setSelectedQuoteForComment(undefined);
   }, [newCommentText, activePage, selectedQuoteForComment, updatePage]);
 
-  // Ponte de contexto para os blocos PageLink dentro do Tiptap
   const pageBridge: PageBridge = useMemo(
     () => ({
       getPageInfo: (id) => {
@@ -609,9 +582,6 @@ export default function Anotacoes() {
     [pages, handleSelectPage, updatePage, duplicatePage, softDeletePage]
   );
 
-  // ============================================================================
-  // BUSCA E NAVEGAÇÃO (BREADCRUMBS)
-  // ============================================================================
   const breadcrumbs = useMemo(() => {
     const trail: NotePage[] = [];
     let curr: NotePage | undefined = activePage;
@@ -635,9 +605,6 @@ export default function Anotacoes() {
     );
   }, [pages, searchQuery]);
 
-  // ============================================================================
-  // GUTTER LATERAL ("+" E "::") E MANIPULAÇÃO DE BLOCOS (PC E MOBILE)
-  // ============================================================================
   const updateGutterByCoordinates = useCallback(
     (clientX: number, clientY: number, targetEl: HTMLElement | null) => {
       if (!editorWrapperRef.current || !editor || blockActionMenu.visible) return;
@@ -805,9 +772,6 @@ export default function Anotacoes() {
     setBlockActionMenu((prev) => ({ ...prev, visible: false }));
   };
 
-  // ============================================================================
-  // EXPORTAÇÃO E IMPORTAÇÃO DE DOCUMENTOS
-  // ============================================================================
   const handleExportDocument = (format: 'md' | 'html' | 'json') => {
     if (!activePage || !editor) return;
     let contentStr = '';
@@ -870,9 +834,6 @@ export default function Anotacoes() {
     setShowExportMenu(false);
   };
 
-  // ============================================================================
-  // RENDERIZAÇÃO
-  // ============================================================================
   return (
     <PageBridgeContext.Provider value={pageBridge}>
       <div
@@ -887,16 +848,12 @@ export default function Anotacoes() {
           onChange={handleImportDocument}
         />
 
-        {/* ===================================================================
-            ACORDEÃO NO CELULAR ("ENCHIRIDION • PÁGINA") E SIDEBAR NO PC
-           =================================================================== */}
         <aside
           className={`w-full lg:w-64 bg-[#12161A] border border-[#1E293B] rounded-2xl px-3.5 ${
             sidebarOpen ? 'py-3.5' : 'py-2.5 lg:hidden'
           } flex flex-col justify-between shrink-0 select-none transition-all`}
         >
           <div>
-            {/* Linha Principal "ENCHIRIDION": clicável no celular para expandir/recolher */}
             <div
               onClick={() => {
                 if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -960,7 +917,6 @@ export default function Anotacoes() {
 
             {sidebarOpen && (
               <>
-                {/* Busca Global */}
                 <div className="relative mb-3">
                   <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-2.5 top-2" />
                   <input
@@ -972,7 +928,6 @@ export default function Anotacoes() {
                   />
                 </div>
 
-                {/* Resultados da Busca ou Árvore de Páginas */}
                 {searchQuery.trim() !== '' ? (
                   <div className="space-y-1 mb-4 max-h-56 overflow-y-auto">
                     <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2">
@@ -995,7 +950,6 @@ export default function Anotacoes() {
                   </div>
                 ) : (
                   <>
-                    {/* Favoritos */}
                     {pages.some((p) => p.isFavorite && !p.isDeleted) && (
                       <div className="mb-4">
                         <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
@@ -1021,7 +975,6 @@ export default function Anotacoes() {
                       </div>
                     )}
 
-                    {/* Lista Hierárquica de Páginas */}
                     <div className="text-[10px] font-semibold uppercase text-[#94A3B8] px-2 mb-1">
                       Páginas
                     </div>
@@ -1070,7 +1023,6 @@ export default function Anotacoes() {
             )}
           </div>
 
-          {/* Rodapé da Sidebar (Lixeira e Nova Página Raiz) */}
           {sidebarOpen && (
             <div className="pt-3 mt-3 border-t border-[#1E293B] space-y-1.5">
               <button
@@ -1137,11 +1089,7 @@ export default function Anotacoes() {
           )}
         </aside>
 
-        {/* ===================================================================
-            ÁREA PRINCIPAL DO DOCUMENTO (#12161A ENCHIRIDION THEME)
-           =================================================================== */}
         <main className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative">
-          {/* Barra Superior Limpa: Breadcrumbs, Status, Favorito, Comentários e Opções */}
           <div className="flex items-center justify-between px-3 sm:px-6 h-12 border-b border-[#1E293B] text-xs select-none">
             <div className="flex items-center gap-1.5 overflow-x-auto">
               {!sidebarOpen && (
@@ -1270,7 +1218,6 @@ export default function Anotacoes() {
             </div>
           </div>
 
-          {/* Capa do Documento (Opcional) */}
           {activePage.cover && (
             <div
               style={{
@@ -1302,7 +1249,6 @@ export default function Anotacoes() {
             </div>
           )}
 
-          {/* Corpo Centralizado com Margem Esquerda Calibrada */}
           <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 flex-1 flex flex-col">
             <div className="group mb-6">
               <div className="relative inline-block mb-2" onClick={(e) => e.stopPropagation()}>
@@ -1489,7 +1435,6 @@ export default function Anotacoes() {
               </div>
             )}
 
-            {/* Container do Editor com Alças "+" e "::" */}
             <div
               ref={editorWrapperRef}
               onMouseMove={handleEditorMouseMove}
@@ -1591,7 +1536,6 @@ export default function Anotacoes() {
             </div>
           </div>
 
-          {/* Barra Flutuante de Seleção de Texto (Apenas Formatação de Texto) */}
           <BubbleToolbar
             editor={editor}
             onAddComment={(quote) => {
@@ -1601,7 +1545,6 @@ export default function Anotacoes() {
             onCreateSubpage={createSubpageInsideEditor}
           />
 
-          {/* Menu do Botão "+" e "/" (Blocos + Soma e Subtração) */}
           <SlashCommandMenu
             editor={editor}
             visible={slashMenu.visible}
@@ -1618,9 +1561,6 @@ export default function Anotacoes() {
   );
 }
 
-// ============================================================================
-// COMPONENTE RECURSIVO DA SIDEBAR (SidebarItem)
-// ============================================================================
 function SidebarItem({
   page,
   allPages,

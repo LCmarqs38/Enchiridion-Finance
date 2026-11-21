@@ -30,7 +30,7 @@ const PAGES = [
   { id: 'inicio', label: 'Início', icon: Home, component: Dashboard },
   { id: 'lancar', label: 'Lançar', icon: PlusCircle, component: Lancamentos },
   { id: 'orcamento', label: 'Orçamento', icon: PiggyBank, component: Orcamento },
-  { id: 'investir', label: 'Investir', icon: TrendingUp, component: Investimentos },
+  { id: 'patrimonio', label: 'Patrimônio', icon: TrendingUp, component: Investimentos },
   { id: 'areceber', label: 'A receber', icon: Clock, component: AReceber },
   { id: 'anotacoes', label: 'Notas', icon: FileText, component: Anotacoes },
 ];
@@ -55,7 +55,14 @@ const safeParse = (key: string, fallback: any = []) => {
   }
 };
 
-// Prepara o espaço isolado do usuário no localStorage (migrando dados antigos do aparelho para o 1º usuário cadastrado nele)
+function normalizeNamespace(user: { username?: string; email?: string; name?: string }): string {
+  return (user.username || user.name || user.email || 'default')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
 function hydrateActiveUserWorkspace(ns: string) {
   for (const key of FINANCIAL_KEYS) {
     const namespacedKey = `${ns}::${key}`;
@@ -120,21 +127,13 @@ export default function App() {
   const [user, setUser] = useState<{ username?: string; email?: string; name: string } | null>(
     () => {
       const u = safeParse('pf_auth_user', null);
-      if (u) {
-        const ns = (u.username || u.name || u.email || 'default')
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, '_');
-        hydrateActiveUserWorkspace(ns);
-      }
+      if (u) hydrateActiveUserWorkspace(normalizeNamespace(u));
       return u;
     }
   );
   const [cloudRefreshTick, setCloudRefreshTick] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sincronização Automática Offline-First Isolada pelo Nome de Usuário
   useEffect(() => {
     if (!user) return;
 
@@ -305,7 +304,7 @@ export default function App() {
 
         if (
           !window.confirm(
-            'Isto irá substituir todos os seus dados atuais pelo backup. Deseja continuar?'
+            'Isso vai substituir todos os seus dados atuais pelo backup. Deseja continuar?'
           )
         ) {
           e.target.value = '';
@@ -351,7 +350,7 @@ export default function App() {
         alert('Backup restaurado com sucesso!');
         window.location.reload();
       } catch {
-        alert('Erro ao importar. Certifique-se de que o ficheiro é um backup válido (JSON).');
+        alert('Erro ao importar. Certifique-se de que o arquivo é um backup válido (JSON).');
       }
       e.target.value = '';
     };
@@ -361,7 +360,7 @@ export default function App() {
   const handleResetData = async () => {
     if (
       !window.confirm(
-        'Tem a certeza de que deseja apagar todos os lançamentos para começar as suas finanças do zero?'
+        'Tem certeza de que deseja apagar todos os lançamentos para começar suas finanças do zero?'
       )
     )
       return;
@@ -393,12 +392,7 @@ export default function App() {
             username: 'usuario',
             name: 'Usuário',
           });
-          const ns = (loggedUser.username || loggedUser.name || 'default')
-            .toString()
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, '_');
-          hydrateActiveUserWorkspace(ns);
+          hydrateActiveUserWorkspace(normalizeNamespace(loggedUser));
           setUser(loggedUser);
         }}
       />
@@ -410,7 +404,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#090A0F] flex overflow-x-hidden">
-      {/* Input único compartilhado para Restaurar Backup (Desktop & Mobile) */}
       <input
         ref={fileInputRef}
         type="file"
@@ -419,7 +412,6 @@ export default function App() {
         onChange={handleImportJSON}
       />
 
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-60 border-r border-slate-800/60 bg-[#0C0E14] fixed h-screen z-30">
         <div className="flex items-center gap-3 px-5 h-14 border-b border-slate-800/60">
           <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700/80 flex items-center justify-center p-1.5 shadow-md">
@@ -465,7 +457,6 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Rodapé da Sidebar */}
         <div className="p-3 border-t border-slate-800/60 space-y-1.5">
           <button
             onClick={handleExportJSON}
@@ -510,12 +501,10 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 lg:ml-60 min-h-screen">
-        {/* Top App Bar — Mobile Only */}
         <header className="lg:hidden sticky top-0 z-40 bg-[#090A0F]/95 backdrop-blur-md border-b border-slate-800/80 px-4 h-14 flex items-center justify-between">
-          <span className="text-sm font-bold text-white tracking-wide uppercase">
-            Painel Financeiro
+          <span className="text-sm font-bold text-white tracking-wider uppercase">
+            ENCHIRIDION
           </span>
           <div className="flex items-center gap-1">
             <button
@@ -549,12 +538,11 @@ export default function App() {
           </div>
         </header>
 
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-32 lg:pb-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-32 lg:pb-8">
           <ActivePage key={`${active}-${cloudRefreshTick}`} />
         </div>
       </main>
 
-      {/* Mobile Bottom Nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0E1318]/95 backdrop-blur-lg border-t border-slate-800/80 px-2 py-1.5 flex justify-around items-center">
         {PAGES.map((p) => (
           <NavItem

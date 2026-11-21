@@ -14,7 +14,6 @@ export interface LegacyBlock {
 const BASE_STORAGE_KEY = 'enchiridion_notion_pages_v8';
 const BACKUP_MIGRATION_KEY = 'enchiridion_pre_tiptap_backup_v8';
 
-// Identifica o nome de usuário logado atualmente para isolar os dados
 export function getCurrentUserNamespace(): string {
   try {
     const raw = localStorage.getItem('pf_auth_user');
@@ -317,9 +316,6 @@ export function savePagesToStorage(pages: NotePage[]): boolean {
   }
 }
 
-// ============================================================================
-// SINCRONIZAÇÃO COM SUPABASE ISOLADA PELO NOME DE USUÁRIO (note_pages)
-// ============================================================================
 export async function syncPagesWithSupabase(localPages: NotePage[]): Promise<NotePage[] | null> {
   if (!isSupabaseConfigured || !supabase) return null;
 
@@ -432,9 +428,6 @@ export async function deletePageFromSupabase(pageId: string): Promise<void> {
   }
 }
 
-// ============================================================================
-// BUSCA E CONVERSÃO MARKDOWN
-// ============================================================================
 export function extractPlainTextFromJSON(node?: JSONContent): string {
   if (!node) return '';
   const parts: string[] = [];

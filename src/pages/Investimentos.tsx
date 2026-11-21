@@ -14,11 +14,17 @@ interface AssetPosition {
   lastUpdated: string;
 }
 
-export default function Investimentos() {
-  const [assets, setAssets] = useState<AssetPosition[]>(() => {
+function readInvestments(): AssetPosition[] {
+  try {
     const saved = localStorage.getItem('pf_investments');
     return saved ? JSON.parse(saved) : [];
-  });
+  } catch {
+    return [];
+  }
+}
+
+export default function Investimentos() {
+  const [assets, setAssets] = useState<AssetPosition[]>(readInvestments);
 
   const [form, setForm] = useState({
     nome: '',
@@ -27,25 +33,26 @@ export default function Investimentos() {
     data: todayISO(),
   });
 
-  const [modalMode, setModalMode] = useState<{ id: string; mode: 'balance' | 'contribute' } | null>(null);
+  const [modalMode, setModalMode] = useState<{ id: string; mode: 'balance' | 'contribute' } | null>(
+    null
+  );
   const [inputValue, setInputValue] = useState('');
 
   useEffect(() => {
     localStorage.setItem('pf_investments', JSON.stringify(assets));
   }, [assets]);
 
-  const totalAplicado = useMemo(() => {
-    return assets.reduce((sum, item) => sum + (item.totalContributed || 0), 0);
-  }, [assets]);
+  const totalAplicado = useMemo(
+    () => assets.reduce((sum, item) => sum + (item.totalContributed || 0), 0),
+    [assets]
+  );
 
-  const patrimonioTotal = useMemo(() => {
-    return assets.reduce((sum, item) => sum + (item.currentBalance || 0), 0);
-  }, [assets]);
+  const patrimonioTotal = useMemo(
+    () => assets.reduce((sum, item) => sum + (item.currentBalance || 0), 0),
+    [assets]
+  );
 
   const rendimentoTotal = patrimonioTotal - totalAplicado;
-  const rentabilidadePercentual = totalAplicado > 0 ? (rendimentoTotal / totalAplicado) * 100 : 0;
-  
-  const lucroLabel = `Lucro / Juros (${rentabilidadePercentual >= 0 ? '+' : ''}${rentabilidadePercentual.toFixed(2)}%)`;
 
   const donutData = useMemo(() => {
     const map = new Map<string, number>();
@@ -62,11 +69,11 @@ export default function Investimentos() {
   const handleAddAsset = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(form.valor);
-    if (!form.nome || isNaN(val)) return;
+    if (!form.nome.trim() || isNaN(val) || val < 0) return;
 
     const newAsset: AssetPosition = {
       id: String(Date.now()),
-      name: form.nome,
+      name: form.nome.trim(),
       type: form.tipo,
       totalContributed: val,
       currentBalance: val,
@@ -80,6 +87,8 @@ export default function Investimentos() {
   const handleApplyModal = (id: string) => {
     const val = parseFloat(inputValue);
     if (isNaN(val) || !modalMode) return;
+    if (modalMode.mode === 'balance' && val < 0) return;
+    if (modalMode.mode === 'contribute' && val <= 0) return;
 
     setAssets((prev) =>
       prev.map((item) => {
@@ -108,27 +117,31 @@ export default function Investimentos() {
 
   const handleDelete = (id: string) => {
     setAssets((prev) => prev.filter((item) => item.id !== id));
+    if (modalMode?.id === id) {
+      setModalMode(null);
+      setInputValue('');
+    }
   };
 
   return (
     <div className="space-y-5 fade-in">
-      <h1 className="text-lg font-semibold text-white tracking-wide">INVESTIMENTOS & RESERVAS</h1>
+      <h1 className="text-lg font-semibold text-white tracking-wide">PATRIMÔNIO</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <MetricCard
-          label="Património Atual (Corretoras)"
+          label="Patrimônio Atual"
           value={patrimonioTotal}
           variant="accent"
           icon={Building2}
         />
         <MetricCard
-          label="Total Aportado (Do seu bolso)"
+          label="Total Aportado"
           value={totalAplicado}
           variant="default"
           icon={Coins}
         />
         <MetricCard
-          label={lucroLabel}
+          label="Lucro"
           value={rendimentoTotal}
           variant={rendimentoTotal >= 0 ? 'positive' : 'negative'}
           icon={TrendingUp}
@@ -249,7 +262,7 @@ export default function Investimentos() {
       <div className="card p-4">
         <h2 className="text-sm font-semibold text-slate-200 mb-3">Carteira & Posições</h2>
         {assets.length === 0 ? (
-          <p className="text-xs text-slate-500 py-4 text-center">Nenhum investimento registado.</p>
+          <p className="text-xs text-slate-500 py-4 text-center">Nenhum ativo registrado.</p>
         ) : (
           <div className="space-y-3">
             {assets.map((item) => {
@@ -292,14 +305,14 @@ export default function Investimentos() {
                   <div className="grid grid-cols-3 gap-2 mb-3 text-center">
                     <div className="bg-[#0E1318] rounded-lg p-2 border border-slate-800/40">
                       <p className="text-[10px] text-slate-500">Total Aportado</p>
-                      <p className="text-xs font-semibold text-slate-200">
+                      <p className="text-xs font-semibold text-slate-200 tabular-nums">
                         {formatCurrency(item.totalContributed)}
                       </p>
                     </div>
                     <div className="bg-[#0E1318] rounded-lg p-2 border border-slate-800/40">
-                      <p className="text-[10px] text-slate-500">Rendimento Total</p>
+                      <p className="text-[10px] text-slate-500">Rendimento</p>
                       <p
-                        className={`text-xs font-semibold ${
+                        className={`text-xs font-semibold tabular-nums ${
                           profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -308,8 +321,8 @@ export default function Investimentos() {
                       </p>
                     </div>
                     <div className="bg-[#0E1318] rounded-lg p-2 border border-blue-900/40 bg-blue-950/10">
-                      <p className="text-[10px] text-blue-400/70">Saldo na Corretora</p>
-                      <p className="text-xs font-bold text-white">
+                      <p className="text-[10px] text-blue-400/70">Saldo Atual</p>
+                      <p className="text-xs font-bold text-white tabular-nums">
                         {formatCurrency(item.currentBalance)}
                       </p>
                     </div>
@@ -317,8 +330,8 @@ export default function Investimentos() {
 
                   {modalMode?.id === item.id ? (
                     <div className="flex items-center gap-2 bg-[#0E1318] p-2 rounded-lg border border-blue-800/50">
-                      <span className="text-[10px] font-semibold text-blue-400 uppercase w-32 truncate">
-                        {modalMode.mode === 'balance' ? 'Novo Saldo Total' : 'Valor do Aporte'}
+                      <span className="text-[10px] font-semibold text-blue-400 uppercase w-28 truncate">
+                        {modalMode.mode === 'balance' ? 'Novo Saldo' : 'Valor do Aporte'}
                       </span>
                       <input
                         type="number"
@@ -346,22 +359,22 @@ export default function Investimentos() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => {
                           setModalMode({ id: item.id, mode: 'balance' });
                           setInputValue(String(item.currentBalance));
                         }}
-                        className="flex-1 btn-primary py-1.5 text-xs flex items-center justify-center gap-1.5"
+                        className="btn-primary py-1.5 px-3 text-xs flex items-center justify-center gap-1.5"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" /> Atualizar Saldo do Extrato
+                        <RefreshCw className="w-3.5 h-3.5" /> Atualizar Saldo
                       </button>
                       <button
                         onClick={() => {
                           setModalMode({ id: item.id, mode: 'contribute' });
                           setInputValue('');
                         }}
-                        className="btn-secondary py-1.5 px-3 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1"
+                        className="btn-secondary py-1.5 px-3 text-xs text-slate-300 hover:text-white flex items-center justify-center gap-1.5"
                       >
                         <PlusCircle className="w-3.5 h-3.5 text-blue-400" /> Aportar Mais
                       </button>

@@ -32,9 +32,6 @@ import {
 } from 'lucide-react';
 import { NOTION_COLORS } from './types';
 
-// ============================================================================
-// FUNÇÕES DE CÁLCULO SIMPLIFICADO (APENAS SOMA E SUBTRAÇÃO)
-// ============================================================================
 export function getSafeBlockInsertPos($pos: any): number {
   for (let d = $pos.depth; d >= 1; d--) {
     const parentName = $pos.node(d - 1).type.name;
@@ -141,9 +138,6 @@ export function calculateSumAndSubtraction(text: string): {
   };
 }
 
-// ============================================================================
-// 1. BUBBLE TOOLBAR (APENAS OPÇÕES DE FORMATAÇÃO DE TEXTO)
-// ============================================================================
 interface BubbleToolbarProps {
   editor: Editor | null;
   onAddComment: (selectedText: string) => void;
@@ -183,7 +177,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         ? Math.min(310, window.innerWidth - 16)
         : 340;
 
-      // Mantém margem segura à esquerda para não cobrir os botões "+" e "::"
       const minLeft = window.innerWidth >= 400 ? 54 : 12;
       const x = Math.max(
         minLeft,
@@ -193,8 +186,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )
       );
 
-      // No celular: posiciona ABAIXO da seleção (+34px) para não colidir com o Copiar/Colar nativo
-      // No PC: posiciona ACIMA da seleção (-44px) em linha única sem cobrir o "+"
       let y: number;
       if (isMobileOrTouch) {
         const belowY = end.bottom + 34;
@@ -292,7 +283,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
     return editor.state.doc.textBetween(from, to, ' ');
   };
 
-  // Apenas conversões diretas de texto e lista (sem duplicar blocos estruturais do menu "+")
   const turnIntoItems = [
     {
       label: 'Texto',
@@ -366,7 +356,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
       }}
       className="fixed z-50 bg-[#181E24] border border-[#1E293B] rounded-xl shadow-2xl px-1.5 py-1 flex flex-nowrap items-center gap-0.5 text-xs text-[#F1F5F9] select-none whitespace-nowrap max-w-[calc(100vw-16px)]"
     >
-      {/* Seletor "Texto" (Transformar em) */}
       <div className="relative shrink-0">
         <button
           type="button"
@@ -408,7 +397,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
       <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5 shrink-0" />
 
-      {/* Botão Paleta de Cores "A" */}
       <div className="relative shrink-0">
         <button
           type="button"
@@ -460,7 +448,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         )}
       </div>
 
-      {/* Formatações Inline: B, I, U, S, Code */}
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -512,7 +499,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
         <Code className="w-3.5 h-3.5" />
       </button>
 
-      {/* Inserir / Editar Link */}
       <div className="relative shrink-0">
         <button
           type="button"
@@ -562,7 +548,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
 
       <div className="w-[1px] h-4 bg-[#1E293B] mx-0.5 shrink-0" />
 
-      {/* Botão Comentário */}
       <button
         type="button"
         onClick={() => {
@@ -580,9 +565,6 @@ export const BubbleToolbar: React.FC<BubbleToolbarProps> = ({
   );
 };
 
-// ============================================================================
-// 2. SLASH COMMAND MENU (MENU DO BOTÃO "+" E ATALHO "/")
-// ============================================================================
 interface SlashCommandMenuProps {
   editor: Editor | null;
   visible: boolean;
@@ -625,7 +607,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 
   const items = useMemo(
     () => [
-      // Blocos Básicos
       {
         group: 'Blocos básicos',
         label: 'Texto',
@@ -727,7 +708,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         icon: Minus,
         action: () => editor?.chain().focus().setHorizontalRule().run(),
       },
-      // Cálculo (Apenas Soma e Subtração)
       {
         group: 'Cálculo',
         label: 'Somar valores (+)',
@@ -742,7 +722,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         icon: Minus,
         action: () => onAutoCalculate?.('subtraction'),
       },
-      // Layout & Avançado
       {
         group: 'Layout & Avançado',
         label: '2 colunas',
@@ -804,7 +783,6 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
         icon: Sigma,
         action: () => editor?.chain().focus().insertContent({ type: 'mathBlock' }).run(),
       },
-      // Mídia
       {
         group: 'Mídia',
         label: 'Imagem',

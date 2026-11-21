@@ -27,9 +27,6 @@ import {
 } from 'lucide-react';
 import { CALLOUT_ICONS } from './types';
 
-// ============================================================================
-// PONTE DE COMUNICAÇÃO ENTRE O EDITOR E A ÁRVORE DE PÁGINAS
-// ============================================================================
 export interface PageBridge {
   getPageInfo: (id: string) => { title: string; icon: string } | null;
   openPage: (id: string) => void;
@@ -46,9 +43,6 @@ export const PageBridgeContext = React.createContext<PageBridge>({
   deletePage: () => {},
 });
 
-// ============================================================================
-// 1. NÓ DE SUBPÁGINA / LINK DE PÁGINA (pageLink)
-// ============================================================================
 const PageLinkComponent = ({ node, deleteNode }: any) => {
   const bridge = React.useContext(PageBridgeContext);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -60,9 +54,9 @@ const PageLinkComponent = ({ node, deleteNode }: any) => {
 
   useEffect(() => {
     if (!ctxMenu) return;
-    const handleGlobalClick = () => setCtxMenu(null);
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
+    const closeMenu = () => setCtxMenu(null);
+    window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
   }, [ctxMenu]);
 
   return (
@@ -182,9 +176,6 @@ export const PageLinkNode = Node.create({
   },
 });
 
-// ============================================================================
-// 2. SISTEMA DE COLUNAS LADO A LADO (columnList & column)
-// ============================================================================
 export const ColumnNode = Node.create({
   name: 'column',
   content: 'block+',
@@ -233,9 +224,6 @@ export const ColumnListNode = Node.create({
   },
 });
 
-// ============================================================================
-// 3. LISTA DE ALTERNANTES / TOGGLE BLOCK (toggleBlock)
-// ============================================================================
 const ToggleComponent = ({ node, updateAttributes }: any) => {
   const open = Boolean(node.attrs.open);
   return (
@@ -286,17 +274,14 @@ export const ToggleNode = Node.create({
   },
 });
 
-// ============================================================================
-// 4. FRASE DE DESTAQUE / CALLOUT (calloutBlock)
-// ============================================================================
 const CalloutComponent = ({ node, updateAttributes }: any) => {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!pickerOpen) return;
-    const handleGlobalClick = () => setPickerOpen(false);
-    window.addEventListener('click', handleGlobalClick);
-    return () => window.removeEventListener('click', handleGlobalClick);
+    const closePicker = () => setPickerOpen(false);
+    window.addEventListener('click', closePicker);
+    return () => window.removeEventListener('click', closePicker);
   }, [pickerOpen]);
 
   return (
@@ -305,11 +290,7 @@ const CalloutComponent = ({ node, updateAttributes }: any) => {
       style={{ backgroundColor: node.attrs.bgColor || '#181E24' }}
       className="my-2.5 p-3.5 rounded-xl border border-[#1E293B] flex items-start gap-3 relative"
     >
-      <div
-        className="relative"
-        contentEditable={false}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="relative" contentEditable={false} onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => setPickerOpen((prev) => !prev)}
@@ -364,11 +345,9 @@ export const CalloutNode = Node.create({
   },
 });
 
-// ============================================================================
-// 5. EQUAÇÃO MATEMÁTICA (mathBlock)
-// ============================================================================
 const MathComponent = ({ node, updateAttributes }: any) => {
   const [editing, setEditing] = useState(false);
+
   return (
     <NodeViewWrapper
       data-type="math-block"
@@ -425,9 +404,6 @@ export const MathNode = Node.create({
   },
 });
 
-// ============================================================================
-// 6. FAVORITO DA WEB / WEB BOOKMARK (bookmarkBlock)
-// ============================================================================
 const BookmarkComponent = ({ node }: any) => {
   const rawUrl = (node.attrs.url || '').trim();
   const safeHref = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl || 'google.com'}`;
@@ -475,9 +451,6 @@ export const BookmarkNode = Node.create({
   },
 });
 
-// ============================================================================
-// 7. IDENTAÇÃO ESTILO NOTION (Tab / Shift+Tab em Parágrafos e Títulos)
-// ============================================================================
 export const IndentExtension = Extension.create({
   name: 'indent',
   addGlobalAttributes() {
@@ -587,9 +560,6 @@ export const IndentExtension = Extension.create({
   },
 });
 
-// ============================================================================
-// 8. TASK ITEM CUSTOMIZADO (MARCA CHECKBOX SEM ABRIR TECLADO E SEM ROLAR TELA)
-// ============================================================================
 const CustomTaskItem = TaskItem.extend({
   addNodeView() {
     return ({ node, HTMLAttributes, getPos, editor }) => {
@@ -603,7 +573,6 @@ const CustomTaskItem = TaskItem.extend({
       checkbox.type = 'checkbox';
       checkbox.tabIndex = -1;
 
-      // Impede que o clique no checkbox foque o contenteditable ou mova o cursor do editor
       checkboxWrapper.addEventListener('mousedown', (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -621,7 +590,6 @@ const CustomTaskItem = TaskItem.extend({
 
         const savedScrollY = window.scrollY;
 
-        // Remove qualquer foco residual do editor no celular antes de despachar a atualização
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
         }
@@ -640,7 +608,6 @@ const CustomTaskItem = TaskItem.extend({
         });
         tr.setMeta('scrollIntoView', false);
 
-        // Despacha apenas a mudança de atributo sem chamar editor.focus()
         editor.view.dispatch(tr);
 
         requestAnimationFrame(() => {
@@ -680,9 +647,6 @@ const CustomTaskItem = TaskItem.extend({
   },
 });
 
-// ============================================================================
-// 9. FÁBRICA COMPLETA DE EXTENSÕES DO ENCHIRIDION
-// ============================================================================
 export function createEnchiridionExtensions() {
   return [
     StarterKit.configure({

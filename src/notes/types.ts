@@ -1,8 +1,5 @@
 import type { JSONContent } from '@tiptap/react';
 
-// ============================================================================
-// TIPAGENS DE COMENTÁRIOS E PÁGINAS DE NOTAS
-// ============================================================================
 export interface PageComment {
   id: string;
   author: string;
@@ -37,9 +34,6 @@ export interface LegacyNota {
   dataAtualizacao?: string;
 }
 
-// ============================================================================
-// PALETA DE CORES, ÍCONES E CAPAS (TEMA ENCHIRIDION)
-// ============================================================================
 export interface NotionColor {
   name: string;
   text: string;
