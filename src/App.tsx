@@ -403,7 +403,7 @@ export default function App() {
   const displayUsername = user.username || user.email || user.name.toLowerCase();
 
   return (
-    <div className="min-h-screen bg-[#090A0F] flex overflow-x-hidden">
+    <div className="min-h-screen w-full max-w-full bg-[#090A0F] flex overflow-x-hidden">
       <input
         ref={fileInputRef}
         type="file"
@@ -501,49 +501,49 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 lg:ml-60 min-h-screen">
-        <header className="lg:hidden sticky top-0 z-40 bg-[#090A0F]/95 backdrop-blur-md border-b border-slate-800/80 px-4 h-14 flex items-center justify-between">
-          <span className="text-sm font-bold text-white tracking-wider uppercase">
+      <main className="flex-1 lg:ml-60 min-h-screen min-w-0 w-full max-w-full overflow-x-hidden">
+        <header className="lg:hidden sticky top-0 z-40 w-full bg-[#090A0F]/95 backdrop-blur-md border-b border-slate-800/80 px-3 h-14 flex items-center justify-between gap-2">
+          <span className="text-sm font-bold text-white tracking-wider uppercase truncate min-w-0">
             ENCHIRIDION
           </span>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 shrink-0">
             <button
               onClick={handleExportJSON}
-              className="icon-btn p-2 text-slate-400 hover:text-blue-400"
+              className="icon-btn p-1.5 text-slate-400 hover:text-blue-400 shrink-0"
               title="Backup JSON"
             >
               <Download className="w-4 h-4 text-blue-500" />
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="icon-btn p-2 text-slate-400 hover:text-emerald-400"
+              className="icon-btn p-1.5 text-slate-400 hover:text-emerald-400 shrink-0"
               title="Restaurar Backup"
             >
               <Upload className="w-4 h-4 text-emerald-500" />
             </button>
             <button
               onClick={handleResetData}
-              className="icon-btn p-2 text-slate-400 hover:text-amber-400"
+              className="icon-btn p-1.5 text-slate-400 hover:text-amber-400 shrink-0"
               title="Zerar Dados"
             >
               <RotateCcw className="w-4 h-4 text-amber-500" />
             </button>
             <button
               onClick={handleLogout}
-              className="icon-btn p-2 text-slate-400 hover:text-rose-400"
+              className="icon-btn p-1.5 text-slate-400 hover:text-rose-400 shrink-0"
               title="Sair"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </header>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-32 lg:pb-8">
+        <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-28 lg:pb-8 min-w-0">
           <ActivePage key={`${active}-${cloudRefreshTick}`} />
         </div>
       </main>
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0E1318]/95 backdrop-blur-lg border-t border-slate-800/80 px-2 py-1.5 flex justify-around items-center">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 w-full max-w-full bg-[#0E1318]/95 backdrop-blur-lg border-t border-slate-800/80 px-1.5 py-1.5 flex justify-around items-center">
         {PAGES.map((p) => (
           <NavItem
             key={p.id}

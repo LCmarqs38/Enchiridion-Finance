@@ -37,13 +37,19 @@ function readExpenseCategories(): string[] {
     const saved = localStorage.getItem('pf_categories');
     const parsed = saved ? JSON.parse(saved) : defaultCategories;
 
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.saida)) {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      Array.isArray(parsed.saida)
+    ) {
       return parsed.saida.length > 0 ? parsed.saida : ['Outros'];
     }
 
     if (Array.isArray(parsed)) {
       const expenses = parsed.filter(
-        (c): c is string => typeof c === 'string' && c.trim().length > 0 && !isIncomeCategoryName(c)
+        (c): c is string =>
+          typeof c === 'string' && c.trim().length > 0 && !isIncomeCategoryName(c)
       );
       return expenses.length > 0 ? expenses : ['Outros'];
     }
@@ -156,47 +162,53 @@ export default function Orcamento() {
   const isDisponivelNegativo = totalDisponivel < 0;
 
   return (
-    <div className="space-y-5 fade-in">
+    <div className="space-y-5 fade-in min-w-0 w-full">
       <h1 className="text-lg font-semibold text-white tracking-wide">ORÇAMENTO MENSAL</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="card p-4 bg-gradient-to-br from-blue-900/20 to-[#12161A]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Limite Total</span>
-            <Target className="w-4 h-4 text-blue-400" />
+        <div className="card p-4 bg-gradient-to-br from-blue-900/20 to-[#12161A] min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wide truncate">
+              Limite Total
+            </span>
+            <Target className="w-4 h-4 text-blue-400 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-blue-400 tabular-nums">
+          <p className="mt-2 text-2xl font-bold text-blue-400 tabular-nums break-all sm:break-normal">
             {formatCurrency(totalLimite)}
           </p>
         </div>
 
-        <div className="card p-4 bg-gradient-to-br from-rose-900/20 to-[#12161A]">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Gasto no Mês</span>
-            <TrendingDown className="w-4 h-4 text-rose-400" />
+        <div className="card p-4 bg-gradient-to-br from-rose-900/20 to-[#12161A] min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wide truncate">
+              Gasto no Mês
+            </span>
+            <TrendingDown className="w-4 h-4 text-rose-400 shrink-0" />
           </div>
-          <p className="mt-2 text-2xl font-bold text-rose-400 tabular-nums">
+          <p className="mt-2 text-2xl font-bold text-rose-400 tabular-nums break-all sm:break-normal">
             {formatCurrency(totalGasto)}
           </p>
         </div>
 
         <div
-          className={`card p-4 bg-gradient-to-br to-[#12161A] ${
+          className={`card p-4 bg-gradient-to-br to-[#12161A] min-w-0 ${
             isDisponivelNegativo
               ? 'from-rose-900/25 border-rose-500/20'
               : 'from-emerald-900/20'
           }`}
         >
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 uppercase tracking-wide">Disponível</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-400 uppercase tracking-wide truncate">
+              Disponível
+            </span>
             {isDisponivelNegativo ? (
-              <AlertTriangle className="w-4 h-4 text-rose-400" />
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
             ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             )}
           </div>
           <p
-            className={`mt-2 text-2xl font-bold tabular-nums ${
+            className={`mt-2 text-2xl font-bold tabular-nums break-all sm:break-normal ${
               isDisponivelNegativo ? 'text-rose-400' : 'text-emerald-400'
             }`}
           >
@@ -205,10 +217,10 @@ export default function Orcamento() {
         </div>
       </div>
 
-      <form onSubmit={handleSaveBudget} className="card p-4 space-y-3">
+      <form onSubmit={handleSaveBudget} className="card p-4 space-y-3 min-w-0">
         <h2 className="text-sm font-semibold text-slate-200">Definir Limite por Categoria</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
+          <div className="min-w-0">
             <label className="label-base">Categoria</label>
             <select
               className="input-base"
@@ -222,7 +234,7 @@ export default function Orcamento() {
               ))}
             </select>
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="label-base">Limite Mensal (R$)</label>
             <input
               type="number"
@@ -233,19 +245,19 @@ export default function Orcamento() {
               onChange={(e) => setFormLimit(e.target.value)}
             />
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end min-w-0">
             <button
               type="submit"
               className="btn-primary w-full flex items-center justify-center gap-1.5"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 shrink-0" />
               <span>Salvar Meta</span>
             </button>
           </div>
         </div>
       </form>
 
-      <div className="card p-4">
+      <div className="card p-4 min-w-0">
         <h2 className="text-sm font-semibold text-slate-200 mb-3">Acompanhamento das Categorias</h2>
         {budgets.length === 0 ? (
           <p className="text-xs text-slate-500 py-6 text-center">
@@ -266,7 +278,7 @@ export default function Orcamento() {
               return (
                 <div
                   key={b.id}
-                  className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60 space-y-2"
+                  className="p-3 bg-slate-900/40 rounded-xl border border-slate-800/60 space-y-2 min-w-0"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -278,7 +290,7 @@ export default function Orcamento() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                       <span className="text-xs font-semibold text-slate-300 tabular-nums">
                         {formatCurrency(gasto)}{' '}
                         <span className="text-slate-500 font-normal">

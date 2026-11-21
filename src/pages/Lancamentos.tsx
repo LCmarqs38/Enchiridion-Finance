@@ -236,7 +236,7 @@ export default function Lancamentos() {
     return (
       <div
         key={tx.id}
-        className="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-800/40 transition"
+        className="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-900/40 border border-slate-800/60 hover:bg-slate-800/40 transition min-w-0"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className={iconContainerClass}>
@@ -253,7 +253,7 @@ export default function Lancamentos() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <span className={valueClass}>
             {isEntradaTx ? '+' : '-'}
             {formatCurrency(tx.value)}
@@ -271,42 +271,42 @@ export default function Lancamentos() {
   };
 
   return (
-    <div className="space-y-5 fade-in">
+    <div className="space-y-5 fade-in min-w-0 w-full">
       <h1 className="text-lg font-semibold text-white tracking-wide">LANÇAMENTOS</h1>
 
-      <form onSubmit={handleAddTransaction} className="card p-4 space-y-4">
+      <form onSubmit={handleAddTransaction} className="card p-4 space-y-4 min-w-0">
         <h2 className="text-sm font-semibold text-slate-200">Novo Registro</h2>
 
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setTipo('saida')}
-            className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition ${
+            className={`py-2 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition min-w-0 ${
               tipo === 'saida'
                 ? 'bg-rose-500/20 text-rose-400 border-rose-500/50'
                 : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:text-slate-200'
             }`}
           >
-            <ArrowUpCircle className="w-4 h-4" />
-            <span>Despesa / Saída</span>
+            <ArrowUpCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">Despesa / Saída</span>
           </button>
 
           <button
             type="button"
             onClick={() => setTipo('entrada')}
-            className={`py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition ${
+            className={`py-2 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border transition min-w-0 ${
               tipo === 'entrada'
                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
                 : 'bg-slate-900/40 text-slate-400 border-slate-800 hover:text-slate-200'
             }`}
           >
-            <ArrowDownCircle className="w-4 h-4" />
-            <span>Receita / Entrada</span>
+            <ArrowDownCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">Receita / Entrada</span>
           </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-w-0">
             <label className="label-base">Descrição</label>
             <input
               type="text"
@@ -317,7 +317,7 @@ export default function Lancamentos() {
             />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <label className="label-base">Valor (R$)</label>
             <input
               type="number"
@@ -329,16 +329,16 @@ export default function Lancamentos() {
             />
           </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs text-slate-400 font-medium">Categoria</label>
+          <div className="min-w-0">
+            <div className="flex justify-between items-center gap-2 mb-1">
+              <label className="text-xs text-slate-400 font-medium truncate">Categoria</label>
               <button
                 type="button"
                 onClick={handleOpenCategoryModal}
-                className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"
+                className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 transition shrink-0"
                 title="Gerenciar categorias"
               >
-                <Settings2 className="w-3 h-3" />
+                <Settings2 className="w-3 h-3 shrink-0" />
                 <span>Gerenciar</span>
               </button>
             </div>
@@ -357,7 +357,7 @@ export default function Lancamentos() {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <div className="w-full sm:w-48">
+          <div className="w-full sm:w-48 min-w-0">
             <label className="label-base">Data</label>
             <input
               type="date"
@@ -366,13 +366,13 @@ export default function Lancamentos() {
               onChange={(e) => setData(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn-primary w-full sm:w-auto self-end">
+          <button type="submit" className="btn-primary w-full sm:w-auto sm:self-end">
             Adicionar Lançamento
           </button>
         </div>
       </form>
 
-      <div className="card p-4">
+      <div className="card p-4 min-w-0">
         <h2 className="text-sm font-semibold text-slate-200 mb-3">Extrato Geral</h2>
         {transactions.length === 0 ? (
           <p className="text-xs text-slate-500 py-6 text-center">
@@ -445,7 +445,7 @@ export default function Lancamentos() {
               <button
                 type="button"
                 onClick={handleAddCategory}
-                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1"
+                className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1 shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Adicionar</span>
@@ -459,7 +459,7 @@ export default function Lancamentos() {
                   className="flex items-center justify-between p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 text-xs"
                 >
                   {editingCategory === cat ? (
-                    <div className="flex items-center gap-1.5 flex-1 mr-2">
+                    <div className="flex items-center gap-1.5 flex-1 mr-2 min-w-0">
                       <input
                         type="text"
                         value={editedCategoryName}
@@ -478,7 +478,7 @@ export default function Lancamentos() {
                       <button
                         type="button"
                         onClick={() => handleSaveEditCategory(cat)}
-                        className="text-emerald-400 hover:text-emerald-300 p-1"
+                        className="text-emerald-400 hover:text-emerald-300 p-1 shrink-0"
                         title="Salvar"
                       >
                         <Check className="w-4 h-4" />
@@ -486,7 +486,7 @@ export default function Lancamentos() {
                       <button
                         type="button"
                         onClick={() => setEditingCategory(null)}
-                        className="text-slate-400 hover:text-slate-300 p-1"
+                        className="text-slate-400 hover:text-slate-300 p-1 shrink-0"
                         title="Cancelar"
                       >
                         <X className="w-4 h-4" />
@@ -494,8 +494,8 @@ export default function Lancamentos() {
                     </div>
                   ) : (
                     <>
-                      <span className="text-slate-200 font-medium">{cat}</span>
-                      <div className="flex items-center gap-1">
+                      <span className="text-slate-200 font-medium truncate pr-2">{cat}</span>
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
                           onClick={() => handleStartEditCategory(cat)}
