@@ -120,7 +120,7 @@ export default function Anotacoes() {
   const [gutter, setGutter] = useState<GutterState>({
     visible: false,
     top: 0,
-    left: 6,
+    left: 4,
     pos: -1,
   });
   const [blockActionMenu, setBlockActionMenu] = useState<BlockActionMenuState>({
@@ -628,7 +628,7 @@ export default function Anotacoes() {
       ) as HTMLElement[];
 
       const isMobile = window.innerWidth < 640;
-      const gutterOffset = isMobile ? 50 : 56;
+      const gutterOffset = isMobile ? 40 : 56;
 
       for (let i = blockElements.length - 1; i >= 0; i--) {
         const el = blockElements[i];
@@ -640,7 +640,7 @@ export default function Anotacoes() {
           : tiptapEl.getBoundingClientRect().left;
 
         const isWithinY = clientY >= rect.top - 6 && clientY <= rect.bottom + 6;
-        const isWithinX = clientX >= anchorLeft - 72 && clientX <= rect.right + 28;
+        const isWithinX = clientX >= anchorLeft - 64 && clientX <= rect.right + 28;
 
         if (isWithinY && isWithinX) {
           const wrapperRect = editorWrapperRef.current.getBoundingClientRect();
@@ -651,7 +651,7 @@ export default function Anotacoes() {
           } catch {}
 
           const rawLeft = anchorLeft - wrapperRect.left - gutterOffset;
-          const safeLeft = Math.max(4, rawLeft);
+          const safeLeft = Math.max(2, rawLeft);
           const nextTop = rect.top - wrapperRect.top;
 
           setGutter((prev) => {
@@ -838,7 +838,7 @@ export default function Anotacoes() {
     <PageBridgeContext.Provider value={pageBridge}>
       <div
         onClick={closeAllFloatingMenus}
-        className="flex flex-col lg:flex-row gap-3 lg:gap-4 min-h-[calc(100vh-5rem)] text-[#F1F5F9]"
+        className="flex flex-col lg:flex-row gap-3 lg:gap-4 min-h-[calc(100vh-5rem)] text-[#F1F5F9] min-w-0 w-full"
       >
         <input
           ref={importInputRef}
@@ -1089,9 +1089,9 @@ export default function Anotacoes() {
           )}
         </aside>
 
-        <main className="flex-1 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative">
+        <main className="flex-1 min-w-0 bg-[#12161A] border border-[#1E293B] rounded-2xl overflow-hidden flex flex-col min-h-[75vh] relative">
           <div className="flex items-center justify-between px-3 sm:px-6 h-12 border-b border-[#1E293B] text-xs select-none">
-            <div className="flex items-center gap-1.5 overflow-x-auto">
+            <div className="flex items-center gap-1.5 overflow-x-auto min-w-0">
               {!sidebarOpen && (
                 <button
                   type="button"
@@ -1249,7 +1249,7 @@ export default function Anotacoes() {
             </div>
           )}
 
-          <div className="max-w-5xl w-full mx-auto pl-14 pr-4 sm:px-16 py-6 sm:py-8 flex-1 flex flex-col">
+          <div className="max-w-3xl w-full mx-auto px-11 sm:px-16 py-6 sm:py-8 flex-1 flex flex-col">
             <div className="group mb-6">
               <div className="relative inline-block mb-2" onClick={(e) => e.stopPropagation()}>
                 <button
@@ -1280,7 +1280,7 @@ export default function Anotacoes() {
                 )}
               </div>
 
-              <div className="flex items-center gap-3 text-xs text-[#94A3B8] mb-2 h-6 opacity-80 group-hover:opacity-100 transition-opacity select-none">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[#94A3B8] mb-2 min-h-[1.5rem] opacity-80 group-hover:opacity-100 transition-opacity select-none">
                 {!activePage.cover && (
                   <button
                     type="button"
@@ -1444,12 +1444,12 @@ export default function Anotacoes() {
                   setGutter((prev) => (prev.visible ? { ...prev, visible: false } : prev));
                 }
               }}
-              className="relative flex-1 -ml-14 pl-14 sm:-ml-16 sm:pl-16"
+              className="relative flex-1 -ml-11 pl-11 sm:-ml-16 sm:pl-16"
             >
               {gutter.visible && (
                 <div
                   style={{ top: gutter.top, left: gutter.left }}
-                  className="gutter-controls absolute flex items-center gap-0.5 pr-2 sm:pr-3 py-0.5 select-none z-20"
+                  className="gutter-controls absolute flex items-center gap-0.5 pr-1 sm:pr-3 py-0.5 select-none z-20"
                 >
                   <button
                     type="button"
